@@ -11,7 +11,6 @@ var allowCustomHeaders = map[string]struct{}{
 	http.CanonicalHeaderKey("X-Timestamp"):   {},
 	http.CanonicalHeaderKey("X-Nonce"):       {},
 	http.CanonicalHeaderKey("X-Platform"):    {},
-	http.CanonicalHeaderKey("X-OperationId"): {},
 	http.CanonicalHeaderKey("X-Device-Id"):   {},
 	http.CanonicalHeaderKey("X-Channel"):     {},
 	http.CanonicalHeaderKey("X-PackageName"): {},
