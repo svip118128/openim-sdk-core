@@ -69,6 +69,15 @@ func (c *HttpCli) SetHeader(key, value string) *HttpCli {
 	return c
 }
 
+// SetCustomHeaders 支持批量设置白名单内的自定义头部字段。
+func (c *HttpCli) SetCustomHeaders(headers map[string]string) *HttpCli {
+	if c.Error != nil {
+		return c
+	}
+	applyCustomHeaders(c.httpRequest.Header, headers)
+	return c
+}
+
 func (c *HttpCli) BodyWithJson(obj interface{}) *HttpCli {
 	if c.Error != nil {
 		return c

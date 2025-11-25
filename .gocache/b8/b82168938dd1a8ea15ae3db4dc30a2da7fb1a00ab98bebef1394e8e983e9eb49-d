@@ -1,0 +1,3 @@
+./msg.go
+./msg.pb.go
+./msg_grpc.pb.go

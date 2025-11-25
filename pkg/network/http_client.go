@@ -99,6 +99,8 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 	request.Header.Set("operationID", operationID)
 	request.Header.Set("token", ctxInfo.Token())
 	request.Header.Set("Accept-Encoding", "gzip")
+	// 自定义头部透传，使用白名单限制键名，避免影响默认头部行为。
+	applyCustomHeaders(request.Header, ctxInfo.CustomHeaders())
 
 	// Send the request and receive the response.
 	response, err := apiClient.Do(request)

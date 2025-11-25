@@ -36,6 +36,8 @@ const (
 type GlobalConfig struct {
 	UserID string
 	Token  string
+	// CustomHTTPHeader 允许外部配置的 HTTP 头部键值对（仅在网络层白名单内生效）。
+	CustomHTTPHeader map[string]string
 
 	*sdk_struct.IMConfig
 }
@@ -49,6 +51,7 @@ type ContextInfo interface {
 	DataDir() string
 	LogLevel() uint32
 	OperationID() string
+	CustomHeaders() map[string]string
 }
 
 func Info(ctx context.Context) ContextInfo {
@@ -119,6 +122,10 @@ func (i *info) LogLevel() uint32 {
 
 func (i *info) OperationID() string {
 	return mcontext.GetOperationID(i.ctx)
+}
+
+func (i *info) CustomHeaders() map[string]string {
+	return i.conf.CustomHTTPHeader
 }
 
 type apiErrCode struct{}
