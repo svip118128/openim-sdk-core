@@ -175,3 +175,5 @@ fabric.properties
 
 # Mac Desktop Services Store
 .DS_Store
+
+/build

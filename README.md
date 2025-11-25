@@ -186,3 +186,6 @@ For more information, see: https://www.openim.io/en/licensing
 <a href="https://github.com/openimsdk/openim-sdk-core/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=OpenIMSDK/openim-sdk-core" />
 </a>
+
+
+run 'make moblie-all' to build file for android and ios

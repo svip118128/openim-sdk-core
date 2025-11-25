@@ -190,14 +190,92 @@ ios:
 	rm -rf build/ open_im_sdk/t_friend_sdk.go open_im_sdk/t_group_sdk.go  open_im_sdk/ws_wrapper/
 	GOARCH=arm64 gomobile bind -v -trimpath -ldflags "-s -w" -o build/OpenIMCore.xcframework -target=ios ./open_im_sdk/ ./open_im_sdk_callback/
 
+## ios-all: Build iOS XCFramework with full workflow
+.PHONY: ios-all
+ios-all:
+	@echo "===========> Building iOS XCFramework"
+	@chmod +x build_ios.sh
+	@./build_ios.sh
+	@echo "===========> XCFramework built successfully: ./build/OpenIMCore.xcframework"
+	@ls -lh ./build/OpenIMCore.xcframework
+
+## ios-test: Test iOS build environment
+.PHONY: ios-test
+ios-test:
+	@chmod +x scripts/test_ios_build.sh
+	@./scripts/test_ios_build.sh
+
+## ios-validate: Validate built XCFramework
+.PHONY: ios-validate
+ios-validate:
+	@chmod +x scripts/validate_xcframework.sh
+	@./scripts/validate_xcframework.sh ./build/OpenIMCore.xcframework
+
+## ios-clean: Clean iOS build artifacts
+.PHONY: ios-clean
+ios-clean:
+	@echo "===========> Cleaning iOS build artifacts"
+	@rm -rf ./build/OpenIMCore.xcframework
+	@echo "===========> iOS build cleaned"
+
+## mobile-all: Build both Android AAR and iOS XCFramework
+.PHONY: mobile-all
+mobile-all: android-all ios-all
+	@echo ""
+	@echo "=========================================="
+	@echo "Mobile Build Complete!"
+	@echo "=========================================="
+	@echo "Android AAR:"
+	@ls -lh ./build/open_im_sdk.aar 2>/dev/null || echo "  Not found"
+	@echo ""
+	@echo "iOS XCFramework:"
+	@ls -lh ./build/OpenIMCore.xcframework 2>/dev/null || echo "  Not found"
+	@echo "=========================================="
+
 ## android: Build the Android library
-# Note: to build an AAR on Windows, gomobile, Android Studio, and the NDK must be installed.
-# The NDK version tested by the OpenIM team was r20b.
-# To build an AAR on Mac, gomobile, Android Studio, and the NDK version 20.0.5594570 must be installed.
 .PHONY: android
 android:
 	go get golang.org/x/mobile/bind
 	GOARCH=amd64 gomobile bind -v -trimpath -ldflags="-s -w" -o ./open_im_sdk.aar -target=android ./open_im_sdk/ ./open_im_sdk_callback/
+
+## android-all: Build Android AAR for all architectures
+.PHONY: android-all
+android-all:
+	@echo "===========> Building AAR for all architectures"
+	@mkdir -p build
+	@export PATH=$$PATH:$$(go env GOPATH)/bin && \
+	go get golang.org/x/mobile/bind && \
+	gomobile bind -v -trimpath -ldflags="-s -w" -o ./build/open_im_sdk.aar -target=android -androidapi=21 ./open_im_sdk/ ./open_im_sdk_callback/
+	@echo "===========> AAR built successfully: ./build/open_im_sdk.aar"
+	@ls -lh ./build/open_im_sdk.aar
+
+## android-arm64: Build Android AAR for ARM64 only
+.PHONY: android-arm64
+android-arm64:
+	@echo "===========> Building AAR for ARM64"
+	@mkdir -p build
+	@export PATH=$$PATH:$$(go env GOPATH)/bin && \
+	go get golang.org/x/mobile/bind && \
+	GOARCH=arm64 gomobile bind -v -trimpath -ldflags="-s -w" -o ./build/open_im_sdk_arm64.aar -target=android/arm64 -androidapi=21 ./open_im_sdk/ ./open_im_sdk_callback/
+	@echo "===========> AAR built successfully: ./build/open_im_sdk_arm64.aar"
+
+## android-test: Test Android build environment
+.PHONY: android-test
+android-test:
+	@chmod +x scripts/test_build.sh
+	@./scripts/test_build.sh
+
+## android-validate: Validate built AAR file
+.PHONY: android-validate
+android-validate:
+	@chmod +x scripts/validate_aar.sh
+	@./scripts/validate_aar.sh ./build/open_im_sdk.aar
+
+## android-setup: Setup Android build environment
+.PHONY: android-setup
+android-setup:
+	@chmod +x scripts/setup_android_env.sh
+	@./scripts/setup_android_env.sh
 
 # Targets
 .PHONY: release
