@@ -156,6 +156,7 @@ type UserContext struct {
 	msgSyncerCh            chan common.Cmd2Value
 	loginMgrCh             chan common.Cmd2Value
 
+	headerMutex sync.RWMutex
 	ctx       context.Context
 	cancel    context.CancelFunc
 	fgCtx     context.Context
@@ -529,4 +530,23 @@ func (u *UserContext) setAppBackgroundStatus(ctx context.Context, isBackground b
 
 func (u *UserContext) LongConnMgr() *interaction.LongConnMgr {
 	return u.longConnMgr
+}
+
+// SetCustomHTTPHeader 用于设置 SDK HTTP 请求的自定义头部（仅支持网络层白名单字段）。
+// 传入的 map 会被拷贝以避免外部并发修改，调用时机建议在发起 HTTP 请求前（如 init/login 之后、业务接口之前）。
+func (u *UserContext) SetCustomHTTPHeader(headers map[string]string) {
+	u.headerMutex.Lock()
+	defer u.headerMutex.Unlock()
+	u.info.CustomHTTPHeader = cloneStringMap(headers)
+}
+
+func cloneStringMap(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
