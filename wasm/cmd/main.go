@@ -49,6 +49,7 @@ func registerFunc() {
 	js.Global().Set("getLoginStatus", js.FuncOf(wrapperInitLogin.GetLoginStatus))
 	js.Global().Set("setAppBackgroundStatus", js.FuncOf(wrapperInitLogin.SetAppBackgroundStatus))
 	js.Global().Set("networkStatusChanged", js.FuncOf(wrapperInitLogin.NetworkStatusChanged))
+	js.Global().Set("setCustomHTTPHeader", js.FuncOf(wrapperInitLogin.SetCustomHTTPHeader))
 
 	//register conversation and message function
 	wrapperConMsg := wasm_wrapper.NewWrapperConMsg(globalFuc)
@@ -177,5 +178,6 @@ func registerFunc() {
 	wrapperThird := wasm_wrapper.NewWrapperThird(globalFuc)
 	js.Global().Set("updateFcmToken", js.FuncOf(wrapperThird.UpdateFcmToken))
 	js.Global().Set("uploadFile", js.FuncOf(wrapperThird.UploadFile))
+
 
 }
