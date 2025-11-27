@@ -108,7 +108,11 @@ func GetLoginStatus(operationID string) int {
 
 // SetCustomHTTPHeader 设置 SDK 所有 HTTP 请求的自定义头部（仅支持网络层白名单字段）。
 // 可在 init/login 成功后、调用业务接口前设置；内部会拷贝一份，不会持有调用方的引用。
-func SetCustomHTTPHeader(headers map[string]string) {
+func SetCustomHTTPHeader(headersJSON string) {
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(headersJSON), &headers); err != nil {
+		return
+	}
 	IMUserContext.SetCustomHTTPHeader(headers)
 }
 
