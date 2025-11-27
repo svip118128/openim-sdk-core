@@ -534,10 +534,42 @@ func (u *UserContext) LongConnMgr() *interaction.LongConnMgr {
 
 // SetCustomHTTPHeader 用于设置 SDK HTTP 请求的自定义头部（仅支持网络层白名单字段）。
 // 传入的 map 会被拷贝以避免外部并发修改，调用时机建议在发起 HTTP 请求前（如 init/login 之后、业务接口之前）。
+// func (u *UserContext) SetCustomHTTPHeader(headers map[string]string) {
+// 	u.headerMutex.Lock()
+// 	defer u.headerMutex.Unlock()
+// 	u.info.CustomHTTPHeader = cloneStringMap(headers)
+// }
+
 func (u *UserContext) SetCustomHTTPHeader(headers map[string]string) {
 	u.headerMutex.Lock()
 	defer u.headerMutex.Unlock()
 	u.info.CustomHTTPHeader = cloneStringMap(headers)
+}
+
+// 第二步：新增包级 SetCustomHTTPHeader 方法（接收 JSON 字符串，供 gomobile 绑定）
+// 这是对外暴露的接口，参数为 JSON 字符串，适配 gomobile 跨语言调用
+func SetCustomHTTPHeader(headersJson string) error {
+	// 1. 校验 JSON 字符串非空（去掉 sdkerrs.ErrInvalidParam）
+	if headersJson == "" {
+		return fmt.Errorf("headersJson is empty") // 直接返回字符串错误
+	}
+
+	// 2. 解析 JSON 为 map[string]string
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(headersJson), &headers); err != nil {
+		log.ZError(context.Background(), "parse headers json failed", err, "headersJson", headersJson)
+		return fmt.Errorf("parse json failed: %w", err)
+	}
+
+	// 3. 校验 IMUserContext 已初始化
+	if IMUserContext == nil {
+		log.ZError(context.Background(), "SetCustomHTTPHeader failed", sdkerrs.ErrSDKNotInit)
+		return sdkerrs.ErrSDKNotInit.WrapMsg("IMUserContext is nil")
+	}
+
+	// 4. 调用 UserContext 的核心方法（存入自定义头部）
+	IMUserContext.SetCustomHTTPHeader(headers)
+	return nil
 }
 
 func cloneStringMap(src map[string]string) map[string]string {

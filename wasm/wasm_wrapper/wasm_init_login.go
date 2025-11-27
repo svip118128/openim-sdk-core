@@ -131,3 +131,33 @@ func (w *WrapperInitLogin) SetAppBackgroundStatus(_ js.Value, args []js.Value) i
 	callback := event_listener.NewBaseCallback(utils.FirstLower(utils.GetSelfFuncName()), w.commonFunc)
 	return event_listener.NewCaller(open_im_sdk.SetAppBackgroundStatus, callback, &args).AsyncCallWithCallback()
 }
+
+func (w *WrapperCommon) SetCustomHTTPHeader(this js.Value, args []js.Value) interface{} {
+	// 1. 入参校验：JS 必须传入一个对象（headers 键值对）
+	if len(args) < 1 || !args[0].IsObject() {
+		// JS 端需要错误信息，返回标准错误格式（和其他 SDK 方法一致）
+		return js.ValueOf(map[string]interface{}{
+			"errCode": -1,
+			"errMsg":  "参数错误：必须传入一个对象（格式：{ 'Authorization': 'xxx', 'X-Device-Id': 'xxx' }）",
+		})
+	}
+
+	// 2. 将 JS 对象转换为 Go 的 map[string]string（适配核心层方法参数）
+	customHeaders := make(map[string]string)
+	// 获取 JS 对象的所有 key（JS 对象没有原生 keys() 时，用这个兼容写法）
+	keys := js.Global().Get("Object").Call("keys", args[0])
+	for i := 0; i < keys.Length(); i++ {
+		key := keys.Index(i).String()
+		value := args[0].Get(key).String() // JS 值转 Go 字符串
+		customHeaders[key] = value
+	}
+
+	// 3. 调用 Go 核心层的 SetCustomHTTPHeader 方法
+	open_im_sdk.SetCustomHTTPHeader(customHeaders)
+
+	// 4. 返回成功结果（JS 端可拿到是否设置成功）
+	return js.ValueOf(map[string]interface{}{
+		"errCode": 0,
+		"errMsg":  "自定义 HTTP 头部设置成功",
+	})
+}
