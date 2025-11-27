@@ -57,6 +57,9 @@ deploy/Open-IM-SDK-Core
 vendor/
 bin/
 tmp/
+.cache/
+.gocache/
+.gomodulecache/
 
 
 ### vscode ###
