@@ -2,15 +2,22 @@ package msgtest
 
 import (
 	"context"
+	"os"
+	"strings"
+	"testing"
+
 	"github.com/openimsdk/openim-sdk-core/v3/msgtest/module"
 	"github.com/openimsdk/openim-sdk-core/v3/msgtest/sdk_user_simulator"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/utils"
 	"github.com/openimsdk/tools/log"
-	"testing"
 )
 
 func Test_SimulateMultiOnline(t *testing.T) {
+	env := strings.TrimSpace(strings.ToLower(os.Getenv("RUN_MSGTEST")))
+	if env == "" || env == "false" {
+		t.Skip("依赖外部服务器，默认跳过")
+	}
 	ctx := ccontext.WithOperationID(context.Background(), "TEST_ROOT")
 	userIDList := []string{"1", "2"}
 	metaManager := module.NewMetaManager(APIADDR, SECRET, MANAGERUSERID)

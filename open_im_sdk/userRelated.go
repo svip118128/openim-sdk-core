@@ -213,13 +213,10 @@ func (u *UserContext) Third() *third.Third {
 }
 
 func (u *UserContext) ImConfig() sdk_struct.IMConfig {
-	return sdk_struct.IMConfig{
-		PlatformID: u.info.PlatformID,
-		ApiAddr:    u.info.ApiAddr,
-		WsAddr:     u.info.WsAddr,
-		DataDir:    u.info.DataDir,
-		LogLevel:   u.info.LogLevel,
+	if u.info == nil || u.info.IMConfig == nil {
+		return sdk_struct.IMConfig{}
 	}
+	return *u.info.IMConfig
 }
 
 func (u *UserContext) Conversation() *conv.Conversation {
@@ -268,6 +265,16 @@ func (u *UserContext) SetUserListener(userListener open_im_sdk_callback.OnUserLi
 
 func (u *UserContext) SetCustomBusinessListener(listener open_im_sdk_callback.OnCustomBusinessListener) {
 	u.businessListener = listener
+}
+
+// SetCustomHTTPHeader 用于设置 SDK HTTP 请求的自定义头部（仅支持网络层白名单字段），传入 JSON 字符串。
+func (u *UserContext) SetCustomHTTPHeader(headersJSON string) {
+	if u.info == nil {
+		return
+	}
+	if err := u.info.SetCustomHTTPHeaderJSON(headersJSON); err != nil {
+		log.ZWarn(u.ctx, "SetCustomHTTPHeader JSON parse failed", err, "headersJSON", headersJSON)
+	}
 }
 
 func (u *UserContext) GetLoginUserID() string {

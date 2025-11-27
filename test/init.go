@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"strconv"
 	"time"
 
@@ -33,6 +34,9 @@ import (
 var ctx context.Context
 
 func init() {
+	if os.Getenv("RUN_OPENIM_INTEGRATION") == "" {
+		return
+	}
 	fmt.Println("------------------------>>>>>>>>>>>>>>>>>>> test init func <<<<<<<<<<<<<<<<<<<------------------------")
 	rand.Seed(time.Now().UnixNano())
 	listner := &OnConnListener{}

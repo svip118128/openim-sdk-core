@@ -16,6 +16,8 @@ package ccontext
 
 import (
 	"context"
+	"encoding/json"
+	"sync"
 
 	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
 	"github.com/openimsdk/openim-sdk-core/v3/sdk_struct"
@@ -36,8 +38,12 @@ const (
 type GlobalConfig struct {
 	UserID string
 	Token  string
+	// CustomHTTPHeaderJSON 支持以 JSON 字符串形式传入自定义 HTTP 头部（仅网络层白名单键生效）。
+	CustomHTTPHeaderJSON string
 
 	*sdk_struct.IMConfig
+
+	customHeaderMu sync.RWMutex
 }
 
 type ContextInfo interface {
@@ -49,6 +55,8 @@ type ContextInfo interface {
 	DataDir() string
 	LogLevel() uint32
 	OperationID() string
+	IsExternalExtensions() bool
+	CustomHeadersJSON() string
 }
 
 func Info(ctx context.Context) ContextInfo {
@@ -60,6 +68,9 @@ func Info(ctx context.Context) ContextInfo {
 }
 
 func WithInfo(ctx context.Context, conf *GlobalConfig) context.Context {
+	if conf != nil && conf.IMConfig == nil {
+		conf.IMConfig = &sdk_struct.IMConfig{}
+	}
 	return context.WithValue(ctx, GlobalConfigKey{}, conf)
 }
 
@@ -98,27 +109,55 @@ func (i *info) Token() string {
 }
 
 func (i *info) PlatformID() int32 {
+	if i.conf.IMConfig == nil {
+		return 0
+	}
 	return i.conf.PlatformID
 }
 
 func (i *info) ApiAddr() string {
+	if i.conf.IMConfig == nil {
+		return ""
+	}
 	return i.conf.ApiAddr
 }
 
 func (i *info) WsAddr() string {
+	if i.conf.IMConfig == nil {
+		return ""
+	}
 	return i.conf.WsAddr
 }
 
 func (i *info) DataDir() string {
+	if i.conf.IMConfig == nil {
+		return ""
+	}
 	return i.conf.DataDir
 }
 
 func (i *info) LogLevel() uint32 {
+	if i.conf.IMConfig == nil {
+		return 0
+	}
 	return i.conf.LogLevel
 }
 
 func (i *info) OperationID() string {
 	return mcontext.GetOperationID(i.ctx)
+}
+
+func (i *info) IsExternalExtensions() bool {
+	if i.conf.IMConfig == nil {
+		return false
+	}
+	return i.conf.IsExternalExtensions
+}
+
+func (i *info) CustomHeadersJSON() string {
+	i.conf.customHeaderMu.RLock()
+	defer i.conf.customHeaderMu.RUnlock()
+	return i.conf.CustomHTTPHeaderJSON
 }
 
 type apiErrCode struct{}
@@ -130,3 +169,24 @@ type ApiErrCodeCallback interface {
 type emptyApiErrCodeCallback struct{}
 
 func (e *emptyApiErrCodeCallback) OnError(ctx context.Context, err error) {}
+
+// SetCustomHTTPHeaderJSON 验证并设置自定义 HTTP 头部 JSON 字符串，非法 JSON 不会覆盖现有配置。
+func (g *GlobalConfig) SetCustomHTTPHeaderJSON(headersJSON string) error {
+	if g == nil {
+		return nil
+	}
+	if headersJSON == "" {
+		g.customHeaderMu.Lock()
+		g.CustomHTTPHeaderJSON = ""
+		g.customHeaderMu.Unlock()
+		return nil
+	}
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(headersJSON), &headers); err != nil {
+		return err
+	}
+	g.customHeaderMu.Lock()
+	g.CustomHTTPHeaderJSON = headersJSON
+	g.customHeaderMu.Unlock()
+	return nil
+}

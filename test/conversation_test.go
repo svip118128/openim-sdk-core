@@ -16,6 +16,7 @@ package test
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -27,7 +28,22 @@ import (
 	"github.com/openimsdk/tools/log"
 )
 
+func TestMain(m *testing.M) {
+	if os.Getenv("RUN_OPENIM_INTEGRATION") == "" {
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+func skipIfNoIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("RUN_OPENIM_INTEGRATION") == "" {
+		t.Skip("依赖外部环境，默认跳过")
+	}
+}
+
 func Test_GetAllConversationList(t *testing.T) {
+	skipIfNoIntegration(t)
 	conversations, err := open_im_sdk.IMUserContext.Conversation().GetAllConversationList(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +56,7 @@ func Test_GetAllConversationList(t *testing.T) {
 }
 
 func Test_GetConversationListSplit(t *testing.T) {
+	skipIfNoIntegration(t)
 	conversations, err := open_im_sdk.IMUserContext.Conversation().GetConversationListSplit(ctx, 0, 20)
 	if err != nil {
 		t.Fatal(err)
@@ -50,6 +67,7 @@ func Test_GetConversationListSplit(t *testing.T) {
 }
 
 func Test_HideConversation(t *testing.T) {
+	skipIfNoIntegration(t)
 	err := open_im_sdk.IMUserContext.Conversation().HideConversation(ctx, "asdasd")
 	if err != nil {
 		t.Fatal(err)
@@ -67,6 +85,7 @@ func Test_HideConversation(t *testing.T) {
 //}
 
 func Test_GetGlobalRecvMessageOpt(t *testing.T) {
+	skipIfNoIntegration(t)
 	opt, err := open_im_sdk.IMUserContext.Conversation().GetOneConversation(ctx, 2, "1772958501")
 	if err != nil {
 		t.Fatal(err)
@@ -75,6 +94,7 @@ func Test_GetGlobalRecvMessageOpt(t *testing.T) {
 }
 
 func Test_GetGetMultipleConversation(t *testing.T) {
+	skipIfNoIntegration(t)
 	conversations, err := open_im_sdk.IMUserContext.Conversation().GetMultipleConversation(ctx, []string{"asdasd"})
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +105,7 @@ func Test_GetGetMultipleConversation(t *testing.T) {
 }
 
 func Test_SetConversationDraft(t *testing.T) {
+	skipIfNoIntegration(t)
 	err := open_im_sdk.IMUserContext.Conversation().SetConversationDraft(ctx, "group_17729585012", "draft")
 	if err != nil {
 		t.Fatal(err)
@@ -92,6 +113,7 @@ func Test_SetConversationDraft(t *testing.T) {
 }
 
 func Test_SetConversation(t *testing.T) {
+	skipIfNoIntegration(t)
 	err := open_im_sdk.IMUserContext.Conversation().SetConversation(ctx, "group_17729585012", &conversation.ConversationReq{})
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +121,7 @@ func Test_SetConversation(t *testing.T) {
 }
 
 func Test_GetTotalUnreadMsgCount(t *testing.T) {
+	skipIfNoIntegration(t)
 	count, err := open_im_sdk.IMUserContext.Conversation().GetTotalUnreadMsgCount(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -107,6 +130,7 @@ func Test_GetTotalUnreadMsgCount(t *testing.T) {
 }
 
 func Test_SendMessage(t *testing.T) {
+	skipIfNoIntegration(t)
 	ctx = context.WithValue(ctx, "callback", TestSendMsg{})
 	msg, _ := open_im_sdk.IMUserContext.Conversation().CreateTextMessage(ctx, "textMsg")
 	_, err := open_im_sdk.IMUserContext.Conversation().SendMessage(ctx, msg, "3411008330", "", nil, false)
@@ -116,6 +140,7 @@ func Test_SendMessage(t *testing.T) {
 }
 
 func Test_SendMessageNotOss(t *testing.T) {
+	skipIfNoIntegration(t)
 	ctx = context.WithValue(ctx, "callback", TestSendMsg{})
 	msg, _ := open_im_sdk.IMUserContext.Conversation().CreateTextMessage(ctx, "textMsg")
 	_, err := open_im_sdk.IMUserContext.Conversation().SendMessageNotOss(ctx, msg, "3411008330", "", nil, false)

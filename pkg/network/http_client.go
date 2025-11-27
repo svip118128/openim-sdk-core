@@ -99,6 +99,11 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 	request.Header.Set("operationID", operationID)
 	request.Header.Set("token", ctxInfo.Token())
 	request.Header.Set("Accept-Encoding", "gzip")
+	if headersJSON := ctxInfo.CustomHeadersJSON(); headersJSON != "" {
+		if err := ApplyCustomHeaders(request.Header, headersJSON); err != nil {
+			log.ZWarn(ctx, "apply custom headers failed", err, "headersJSON", headersJSON)
+		}
+	}
 
 	// Send the request and receive the response.
 	response, err := apiClient.Do(request)
