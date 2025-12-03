@@ -16,6 +16,7 @@ package open_im_sdk
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
 )
@@ -134,10 +135,14 @@ func GetConversationIDBySessionType(operationID string, sourceID string, session
 	return IMUserContext.Conversation().GetConversationIDBySessionType(context.Background(), sourceID, sessionType)
 }
 func SendMessage(callback open_im_sdk_callback.SendMsgCallBack, operationID, message, recvID, groupID, offlinePushInfo string, isOnlineOnly bool) {
+	fmt.Printf("[DEBUG SendMessage] operationID: %s, recvID: %s, groupID: %s, messageLen: %d, isOnlineOnly: %v\n",
+		operationID, recvID, groupID, len(message), isOnlineOnly)
 	messageCall(callback, operationID, IMUserContext.Conversation().SendMessage, message, recvID, groupID, offlinePushInfo, isOnlineOnly)
 }
 
 func SendMessageNotOss(callback open_im_sdk_callback.SendMsgCallBack, operationID string, message, recvID, groupID string, offlinePushInfo string, isOnlineOnly bool) {
+	fmt.Printf("[DEBUG SendMessageNotOss] operationID: %s, recvID: %s, groupID: %s, messageLen: %d, isOnlineOnly: %v\n",
+		operationID, recvID, groupID, len(message), isOnlineOnly)
 	messageCall(callback, operationID, IMUserContext.Conversation().SendMessageNotOss, message, recvID, groupID, offlinePushInfo, isOnlineOnly)
 }
 

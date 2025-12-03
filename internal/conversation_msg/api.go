@@ -3,7 +3,6 @@ package conversation_msg
 import (
 	"context"
 	"fmt"
-	"github.com/openimsdk/protocol/msg"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/openimsdk/protocol/msg"
 
 	"github.com/openimsdk/tools/errs"
 
@@ -178,6 +179,7 @@ func (c *Conversation) fileName(ftype string, id string) string {
 func (c *Conversation) checkID(ctx context.Context, s *sdk_struct.MsgStruct,
 	recvID, groupID string, options map[string]bool) (*model_struct.LocalConversation, error) {
 	if recvID == "" && groupID == "" {
+		log.ZWarn(ctx, "[DEBUG checkID] INPUT_VALIDATION: Both recvID and groupID are empty", nil)
 		return nil, sdkerrs.ErrArgs
 	}
 	s.SendID = c.loginUserID
@@ -185,8 +187,10 @@ func (c *Conversation) checkID(ctx context.Context, s *sdk_struct.MsgStruct,
 	lc := &model_struct.LocalConversation{LatestMsgSendTime: s.CreateTime}
 	//assemble messages and conversations based on single or group chat types
 	if recvID == "" {
+		log.ZInfo(ctx, "[DEBUG checkID] Processing group message", "groupID", groupID, "messageType", "group")
 		g, err := c.group.FetchGroupOrError(ctx, groupID)
 		if err != nil {
+			log.ZError(ctx, "[DEBUG checkID] FetchGroupOrError failed", err, "groupID", groupID)
 			return nil, err
 		}
 		lc.ShowName = g.GroupName
@@ -220,6 +224,7 @@ func (c *Conversation) checkID(ctx context.Context, s *sdk_struct.MsgStruct,
 		attachedInfo.GroupHasReadInfo.GroupMemberCount = g.MemberCount
 		s.AttachedInfoElem = &attachedInfo
 	} else {
+		log.ZInfo(ctx, "[DEBUG checkID] Processing single message", "recvID", recvID, "messageType", "single")
 		s.SessionType = constant.SingleChatType
 		s.RecvID = recvID
 		lc.ConversationID = utils.GetConversationIDByMsg(s)
@@ -238,6 +243,7 @@ func (c *Conversation) checkID(ctx context.Context, s *sdk_struct.MsgStruct,
 			faceUrl, name, err := c.getUserNameAndFaceURL(ctx, recvID)
 			log.ZDebug(ctx, "GetUserNameAndFaceURL", "cost time", time.Since(t))
 			if err != nil {
+				log.ZError(ctx, "[DEBUG checkID] getUserNameAndFaceURL failed", err, "recvID", recvID)
 				return nil, err
 			}
 			lc.FaceURL = faceUrl
@@ -279,8 +285,10 @@ func (c *Conversation) SendMessage(ctx context.Context, s *sdk_struct.MsgStruct,
 	options := make(map[string]bool, 2)
 	lc, err := c.checkID(ctx, s, recvID, groupID, options)
 	if err != nil {
+		log.ZError(ctx, "[DEBUG SendMessage] checkID failed", err, "recvID", recvID, "groupID", groupID)
 		return nil, err
 	}
+	log.ZInfo(ctx, "[DEBUG SendMessage] Starting message processing", "clientMsgID", s.ClientMsgID, "contentType", s.ContentType, "recvID", recvID, "groupID", groupID, "conversationID", lc.ConversationID)
 	callback, _ := ctx.Value("callback").(open_im_sdk_callback.SendMsgCallBack)
 	log.ZDebug(ctx, "before insert message is", "message", *s)
 	if !isOnlineOnly {
@@ -615,6 +623,7 @@ func (c *Conversation) SendMessageNotOss(ctx context.Context, s *sdk_struct.MsgS
 
 func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.MsgStruct, lc *model_struct.LocalConversation, callback open_im_sdk_callback.SendMsgCallBack,
 	delFiles []string, offlinePushInfo *sdkws.OfflinePushInfo, options map[string]bool, isOnlineOnly bool) (*sdk_struct.MsgStruct, error) {
+	log.ZInfo(ctx, "[DEBUG sendMessageToServer] Preparing to send message to server", "clientMsgID", s.ClientMsgID, "serverMsgID", s.ServerMsgID, "isOnlineOnly", isOnlineOnly, "conversationID", lc.ConversationID)
 	if isOnlineOnly {
 		utils.SetSwitchFromOptions(options, constant.IsHistory, false)
 		utils.SetSwitchFromOptions(options, constant.IsPersistent, false)
@@ -641,6 +650,7 @@ func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.Ms
 	//err := c.LongConnMgr.SendReqWaitResp(ctx, &wsMsgData, constant.SendMsg, &sendMsgResp)
 	err := c.sendMsg(ctx, s, &wsMsgData, nil)
 	if err != nil {
+		log.ZError(ctx, "[DEBUG sendMessageToServer] sendMsg failed", err, "clientMsgID", s.ClientMsgID, "isNetworkTimeout", sdkerrs.ErrNetworkTimeOut.Is(err), "isOnlineOnly", isOnlineOnly)
 		//if send message network timeout need to double-check message has received by db.
 		if sdkerrs.ErrNetworkTimeOut.Is(err) && !isOnlineOnly {
 			oldMessage, err := c.db.GetMessage(ctx, lc.ConversationID, s.ClientMsgID)
@@ -648,6 +658,7 @@ func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.Ms
 				return nil, err
 			}
 			if oldMessage.Status == constant.MsgStatusSendSuccess {
+				log.ZInfo(ctx, "[DEBUG sendMessageToServer] Message found in DB after timeout", "clientMsgID", s.ClientMsgID, "status", "SEND_SUCCESS")
 				sendMsgResp.SendTime = oldMessage.SendTime
 				sendMsgResp.ClientMsgID = oldMessage.ClientMsgID
 				sendMsgResp.ServerMsgID = oldMessage.ServerMsgID
@@ -667,6 +678,7 @@ func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.Ms
 	s.SendTime = sendMsgResp.SendTime
 	s.Status = constant.MsgStatusSendSuccess
 	s.ServerMsgID = sendMsgResp.ServerMsgID
+	log.ZInfo(ctx, "[DEBUG sendMessageToServer] Message sent to server successfully", "clientMsgID", s.ClientMsgID, "serverMsgID", sendMsgResp.ServerMsgID, "sendTime", sendMsgResp.SendTime)
 	go func() {
 		//remove media cache file
 		for _, file := range delFiles {

@@ -74,6 +74,7 @@ func InitSDK(listener open_im_sdk_callback.OnConnListener, operationID string, c
 		log.ZError(ctx, "listener or config is nil", nil)
 		return false
 	}
+	log.ZInfo(ctx, "=== DEBUG: SendMessage flow started ===", "operationID", operationID, "platformID", configArgs.PlatformID, "version", version.Version)
 	return IMUserContext.InitSDK(&configArgs, listener)
 }
 func UnInitSDK(_ string) {

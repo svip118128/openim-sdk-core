@@ -369,15 +369,18 @@ func messageCall_(callback open_im_sdk_callback.SendMsgCallBack, operationID str
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println(" panic err:", r, string(debug.Stack()))
+			log.ZError(context.Background(), "[DEBUG messageCall_] PANIC", fmt.Errorf("panic: %v", r), "operationID", operationID)
 			callback.OnError(sdkerrs.SdkInternalError, fmt.Sprintf("recover: %+v", r))
 			return
 		}
 	}()
 	if operationID == "" {
+		log.ZWarn(context.Background(), "[DEBUG messageCall_] INPUT_VALIDATION: operationID is empty", nil)
 		callback.OnError(sdkerrs.ArgsError, sdkerrs.ErrArgs.WrapMsg("operationID is empty").Error())
 		return
 	}
 	if err := CheckResourceLoad(IMUserContext, ""); err != nil {
+		log.ZError(context.Background(), "[DEBUG messageCall_] CheckResourceLoad failed", err, "operationID", operationID)
 		if code, ok := errs.Unwrap(err).(errs.CodeError); ok {
 			callback.OnError(int32(code.Code()), err.Error())
 		}
@@ -385,12 +388,14 @@ func messageCall_(callback open_im_sdk_callback.SendMsgCallBack, operationID str
 	}
 	fnv := reflect.ValueOf(fn)
 	if fnv.Kind() != reflect.Func {
+		log.ZWarn(context.Background(), "[DEBUG messageCall_] ERROR: fn is not function", nil, "operationID", operationID)
 		callback.OnError(sdkerrs.SdkInternalError, "go code error: fn is not function")
 		return
 	}
 	fnt := fnv.Type()
 	numIn := fnt.NumIn()
 	if len(args)+1 != numIn {
+		log.ZWarn(context.Background(), "[DEBUG messageCall_] ERROR: fn in args num is not match", nil, "operationID", operationID, "expectedArgs", numIn-1, "actualArgs", len(args))
 		callback.OnError(sdkerrs.SdkInternalError, "go code error: fn in args num is not match")
 		return
 	}
@@ -402,6 +407,7 @@ func messageCall_(callback open_im_sdk_callback.SendMsgCallBack, operationID str
 	funcPtr := reflect.ValueOf(fn).Pointer()
 	funcName := runtime.FuncForPC(funcPtr).Name()
 	log.ZInfo(ctx, "input req", "function name", funcName, "args", args)
+	log.ZInfo(ctx, "[DEBUG messageCall_] BEFORE_SEND", "operationID", operationID, "function", funcName, "argsCount", len(args))
 
 	ins = append(ins, reflect.ValueOf(ctx))
 	for i := 0; i < len(args); i++ { // callback open_im_sdk_callback.Base, operationID string, ...
@@ -416,6 +422,7 @@ func messageCall_(callback open_im_sdk_callback.SendMsgCallBack, operationID str
 			case reflect.Struct, reflect.Slice, reflect.Array, reflect.Map, reflect.Ptr:
 				v := reflect.New(tag)
 				if err := json.Unmarshal([]byte(args[i].(string)), v.Interface()); err != nil {
+					log.ZError(ctx, "[DEBUG messageCall_] JSON unmarshal failed", err, "operationID", operationID, "argIndex", i)
 					callback.OnError(sdkerrs.ArgsError, err.Error())
 					return
 				}
@@ -429,6 +436,7 @@ func messageCall_(callback open_im_sdk_callback.SendMsgCallBack, operationID str
 			ins = append(ins, reflect.ValueOf(v))
 			continue
 		}
+		log.ZWarn(ctx, "[DEBUG messageCall_] INPUT_VALIDATION: fn in args type is not match", nil, "operationID", operationID, "argIndex", i, "expectedType", tag.String(), "actualType", arg.String())
 		callback.OnError(sdkerrs.ArgsError, "go code error: fn in args type is not match")
 		return
 	}
@@ -445,6 +453,7 @@ func messageCall_(callback open_im_sdk_callback.SendMsgCallBack, operationID str
 	}
 	if lastErr {
 		if last := outVals[len(outVals)-1]; last != nil {
+			log.ZError(ctx, "[DEBUG messageCall_] Function returned error", last.(error), "operationID", operationID, "function", funcName)
 			if code, ok := errs.Unwrap(last.(error)).(errs.CodeError); ok {
 				callback.OnError(int32(code.Code()), last.(error).Error())
 			} else {
@@ -476,10 +485,12 @@ func messageCall_(callback open_im_sdk_callback.SendMsgCallBack, operationID str
 	}
 	jsonData, err := json.Marshal(jsonVal)
 	if err != nil {
+		log.ZError(ctx, "[DEBUG messageCall_] JSON marshal failed for output", err, "operationID", operationID, "function", funcName)
 		callback.OnError(sdkerrs.ArgsError, err.Error())
 		return
 	}
 	log.ZInfo(ctx, "output resp", "function name", funcName, "resp", jsonVal, "cost time", time.Since(t))
+	log.ZInfo(ctx, "[DEBUG messageCall_] Function executed successfully", "operationID", operationID, "function", funcName, "costTimeMs", time.Since(t).Milliseconds())
 	callback.OnSuccess(string(jsonData))
 }
 
