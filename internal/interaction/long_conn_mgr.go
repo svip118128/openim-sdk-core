@@ -149,7 +149,11 @@ func (c *LongConnMgr) ResumeForegroundTasks(ctx, fgCtx context.Context) {
 
 func (c *LongConnMgr) SendReqWaitResp(ctx context.Context, m proto.Message, reqIdentifier int, resp proto.Message) error {
 	data, err := proto.Marshal(m)
+	log.ZInfo(ctx, "[DEBUG sdk]", "m", m, "messageType", "group")
+	log.ZInfo(ctx, "[DEBUG sdk]", "data", data, "messageType", "group")
+	log.ZInfo(ctx, "[DEBUG sdk]", "err", err, "messageType", "group")
 	if err != nil {
+		log.ZError(ctx, "[DEBUG SendReqWaitResp] FetchGroupOrError failed", err, "groupID", "1")
 		return sdkerrs.ErrArgs
 	}
 	msg := Message{
@@ -171,9 +175,11 @@ func (c *LongConnMgr) SendReqWaitResp(ctx context.Context, m proto.Message, reqI
 			return errors.New("response channel closed")
 		}
 		if v.ErrCode != 0 {
+			log.ZInfo(ctx, "[DEBUG sdk]", "v", v, "messageType", "group")
 			return errs.NewCodeError(v.ErrCode, v.ErrMsg)
 		}
 		if err := proto.Unmarshal(v.Data, resp); err != nil {
+			log.ZInfo(ctx, "[DEBUG sdk]", "err", err, "messageType", "group")
 			return sdkerrs.ErrArgs
 		}
 		return nil
