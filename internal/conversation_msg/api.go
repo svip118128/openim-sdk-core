@@ -3,7 +3,6 @@ package conversation_msg
 import (
 	"context"
 	"fmt"
-	"github.com/openimsdk/protocol/msg"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,10 +11,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/openimsdk/protocol/msg"
+
 	"github.com/openimsdk/tools/errs"
 
 	"github.com/openimsdk/openim-sdk-core/v3/internal/third/file"
 	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/common"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/constant"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/content_type"
@@ -268,6 +270,7 @@ func (c *Conversation) GetConversationIDBySessionType(_ context.Context, sourceI
 }
 
 func (c *Conversation) SendMessage(ctx context.Context, s *sdk_struct.MsgStruct, recvID, groupID string, p *sdkws.OfflinePushInfo, isOnlineOnly bool) (*sdk_struct.MsgStruct, error) {
+	log.ZDebug(ctx, "SendMessage START", "recvID", recvID, "groupID", groupID, "contentType", s.ContentType, "clientMsgID", s.ClientMsgID, "isOnlineOnly", isOnlineOnly)
 	filepathExt := func(name ...string) string {
 		for _, path := range name {
 			if ext := filepath.Ext(path); ext != "" {
@@ -279,9 +282,14 @@ func (c *Conversation) SendMessage(ctx context.Context, s *sdk_struct.MsgStruct,
 	options := make(map[string]bool, 2)
 	lc, err := c.checkID(ctx, s, recvID, groupID, options)
 	if err != nil {
+		log.ZError(ctx, "SendMessage checkID failed", err, "recvID", recvID, "groupID", groupID)
 		return nil, err
 	}
-	callback, _ := ctx.Value("callback").(open_im_sdk_callback.SendMsgCallBack)
+	log.ZDebug(ctx, "SendMessage checkID success", "conversationID", lc.ConversationID, "conversationType", lc.ConversationType)
+	callback, ok := ctx.Value(ccontext.CtxCallback).(open_im_sdk_callback.SendMsgCallBack)
+	if !ok {
+		return nil, sdkerrs.ErrSdkInternal.WrapMsg("context not found SendMsgCallBack")
+	}
 	log.ZDebug(ctx, "before insert message is", "message", *s)
 	if !isOnlineOnly {
 		oldMessage, err := c.db.GetMessage(ctx, lc.ConversationID, s.ClientMsgID)
@@ -615,6 +623,7 @@ func (c *Conversation) SendMessageNotOss(ctx context.Context, s *sdk_struct.MsgS
 
 func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.MsgStruct, lc *model_struct.LocalConversation, callback open_im_sdk_callback.SendMsgCallBack,
 	delFiles []string, offlinePushInfo *sdkws.OfflinePushInfo, options map[string]bool, isOnlineOnly bool) (*sdk_struct.MsgStruct, error) {
+	log.ZDebug(ctx, "sendMessageToServer START", "clientMsgID", s.ClientMsgID, "conversationID", lc.ConversationID, "contentType", s.ContentType, "isOnlineOnly", isOnlineOnly)
 	if isOnlineOnly {
 		utils.SetSwitchFromOptions(options, constant.IsHistory, false)
 		utils.SetSwitchFromOptions(options, constant.IsPersistent, false)
@@ -684,12 +693,15 @@ func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.Ms
 }
 
 func (c *Conversation) sendMsg(ctx context.Context, s *sdk_struct.MsgStruct, wsMsgData *sdkws.MsgData, sendMsgResp *msg.SendMsgResp) error {
+	log.ZDebug(ctx, "sendMsg START via WebSocket", "clientMsgID", s.ClientMsgID, "sendID", wsMsgData.SendID, "recvID", wsMsgData.RecvID, "groupID", wsMsgData.GroupID, "contentType", wsMsgData.ContentType)
 	if sendMsgResp == nil {
 		sendMsgResp = &msg.SendMsgResp{}
 	}
 	if err := c.LongConnMgr.SendReqWaitResp(ctx, wsMsgData, constant.SendMsg, sendMsgResp); err != nil {
+		log.ZError(ctx, "sendMsg WebSocket send failed", err, "clientMsgID", s.ClientMsgID)
 		return err
 	}
+	log.ZDebug(ctx, "sendMsg WebSocket response received", "clientMsgID", sendMsgResp.ClientMsgID, "serverMsgID", sendMsgResp.ServerMsgID, "sendTime", sendMsgResp.SendTime)
 	if sendMsgResp.Modify == nil {
 		s.SendTime = sendMsgResp.SendTime
 		s.Status = constant.MsgStatusSendSuccess
