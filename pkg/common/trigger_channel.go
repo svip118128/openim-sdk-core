@@ -182,6 +182,7 @@ func DoListener(ctx context.Context, li goroutine) {
 	for {
 		select {
 		case cmd := <-li.GetCh():
+			// ken here
 			log.ZInfo(cmd.Ctx, "recv cmd", "caller", cmd.Caller, "cmd", cmd.Cmd, "value", cmd.Value)
 			li.Work(cmd)
 			log.ZInfo(cmd.Ctx, "done cmd", "caller", cmd.Caller, "cmd", cmd.Cmd, "value", cmd.Value)

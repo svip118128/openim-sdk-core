@@ -623,9 +623,11 @@ func (m *MsgSyncer) splitSeqs(split int, seqsNeedSync []int64) (splitSeqs [][]in
 }
 
 func (m *MsgSyncer) pullMsgBySeqRange(ctx context.Context, seqMap map[string][2]int64, syncMsgNum int64) (resp *sdkws.PullMessageBySeqsResp, err error) {
+
 	log.ZDebug(ctx, "pullMsgBySeqRange", "seqMap", seqMap, "syncMsgNum", syncMsgNum)
 
 	req := sdkws.PullMessageBySeqsReq{UserID: m.loginUserID}
+
 	for conversationID, seqs := range seqMap {
 		req.SeqRanges = append(req.SeqRanges, &sdkws.SeqRange{
 			ConversationID: conversationID,
@@ -636,6 +638,7 @@ func (m *MsgSyncer) pullMsgBySeqRange(ctx context.Context, seqMap map[string][2]
 	}
 	resp = &sdkws.PullMessageBySeqsResp{}
 	if err := m.longConnMgr.SendReqWaitResp(ctx, &req, constant.PullMsgByRange, resp); err != nil {
+		log.ZDebug(ctx, "[debug] pullMsgBySeqRange 1", "pullMsgBySeqRange 1", resp)
 		return nil, err
 	}
 	return resp, nil
@@ -650,6 +653,7 @@ func (m *MsgSyncer) fetchLatestValidMessages(ctx context.Context, conversationID
 	}
 	resp = &msg.GetLastMessageResp{}
 	if err := m.longConnMgr.SendReqWaitResp(ctx, &req, constant.PullConvLastMessage, resp); err != nil {
+		log.ZDebug(ctx, "[debug] fetchLatestValidMessages 1", "fetchLatestValidMessages 1", resp)
 		return nil, err
 	}
 	return resp, nil
@@ -674,6 +678,7 @@ func (m *MsgSyncer) syncMsgBySeqs(ctx context.Context, conversationID string, se
 	return allMsgs, nil
 }
 
+// ken here
 // triggers a conversation with a new message.
 func (m *MsgSyncer) triggerConversation(ctx context.Context, msgs map[string]*sdkws.PullMsgs) error {
 	if len(msgs) > 0 {

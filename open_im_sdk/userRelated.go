@@ -347,6 +347,7 @@ func (u *UserContext) checkSendingMessage(ctx context.Context) {
 
 func (u *UserContext) handlerSendingMsg(ctx context.Context, sendingMsg *model_struct.LocalSendingMessages) error {
 	tableMessage, err := u.db.GetMessage(ctx, sendingMsg.ConversationID, sendingMsg.ClientMsgID)
+	log.ZDebug(ctx, "[debug] tableMessage", "tableMessage", tableMessage)
 	if err != nil {
 		return err
 	}

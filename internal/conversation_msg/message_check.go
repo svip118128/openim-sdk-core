@@ -225,17 +225,20 @@ func (c *Conversation) fetchAndMergeMissingMessages(ctx context.Context, convers
 		return
 	}
 	err := c.SendReqWaitResp(ctx, &getSeqMessageReq, constant.PullMsgBySeqList, &getSeqMessageResp)
+
 	if err != nil {
+		log.ZDebug(ctx, "[debug] getSeqMessageResp.Msgs 1,  ", "req", getSeqMessageResp.Msgs)
+		log.ZDebug(ctx, "[debug] getSeqMessageResp.Msgs 1,  ", "req", getSeqMessageResp.Msgs)
 		errHandle(seqList, list, err, messageListCallback)
 		log.ZWarn(ctx, "pull SendReqWaitResp failed", err, "req")
 	} else {
-		log.ZDebug(ctx, "syncMsgFromServerSplit pull msg", "resp", getSeqMessageResp)
 		if getSeqMessageResp.Msgs == nil {
 			log.ZWarn(ctx, "syncMsgFromServerSplit pull msg is null", errors.New("pull message is null"),
 				"req", getSeqMessageResp.String())
 			return
 		}
 		if v, ok := getSeqMessageResp.Msgs[conversationID]; ok {
+			log.ZDebug(ctx, "[debug] getSeqMessageResp.Msgs 3,  ", "req", getSeqMessageResp.Msgs)
 			c.pullMessageIntoTable(ctx, getSeqMessageResp.Msgs, list)
 			log.ZDebug(ctx, "syncMsgFromServerSplit pull msg success",
 				"conversationID", conversationID, "count", count, "len", len(*list), "msgLen", len(v.Msgs))

@@ -60,7 +60,9 @@ func (c *Conversation) getAdvancedHistoryMessageList(ctx context.Context, req sd
 	var messageList sdk_struct.NewMsgList
 	conversationID = req.ConversationID
 	if len(req.StartClientMsgID) > 0 {
+
 		m, err := c.db.GetMessage(ctx, conversationID, req.StartClientMsgID)
+		log.ZDebug(ctx, "[debug] message", "message", m)
 		if err != nil {
 			return nil, err
 		}
@@ -104,6 +106,7 @@ func (c *Conversation) handleEndSeq(ctx context.Context, req sdk.GetAdvancedHist
 				c.messagePullReverseEndSeqMap.Store(req.ConversationID, req.ViewType, startMessage.Seq)
 			} else {
 				validServerMessage, err := c.db.GetLatestValidServerMessage(ctx, req.ConversationID, startMessage.SendTime, isReverse)
+				log.ZDebug(ctx, "[debug] validServerMessage 1", "mvalidServerMessage 1", validServerMessage)
 				if err != nil {
 					return err
 				}
@@ -121,6 +124,7 @@ func (c *Conversation) handleEndSeq(ctx context.Context, req sdk.GetAdvancedHist
 				c.messagePullForwardEndSeqMap.Store(req.ConversationID, req.ViewType, startMessage.Seq)
 			} else {
 				validServerMessage, err := c.db.GetLatestValidServerMessage(ctx, req.ConversationID, startMessage.SendTime, isReverse)
+				log.ZDebug(ctx, "[debug] validServerMessage 2", "mvalidServerMessage 2", validServerMessage)
 				if err != nil {
 					return err
 				}
@@ -209,6 +213,7 @@ func (c *Conversation) fetchMessagesWithGapCheck(ctx context.Context, conversati
 
 	t := time.Now()
 	list, err := c.db.GetMessageList(ctx, conversationID, count, startTime, startSeq, startClientMsgID, isReverse)
+	log.ZDebug(ctx, "[debug] validServerMessage 3", "mvalidServerMessage 3", list)
 	log.ZDebug(ctx, "db get messageList", "cost time", time.Since(t), "len", len(list), "err",
 		err, "conversationID", conversationID)
 

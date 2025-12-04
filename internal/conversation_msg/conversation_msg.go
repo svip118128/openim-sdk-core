@@ -244,7 +244,7 @@ func (c *Conversation) doMsgNew(c2v common.Cmd2Value) {
 			conversationID, "message length", len(msgs.Msgs))
 		var insertMessage, selfInsertMessage, othersInsertMessage []*model_struct.LocalChatLog
 		var updateMessage []*model_struct.LocalChatLog
-
+		//ken here
 		for _, v := range msgs.Msgs {
 			log.ZDebug(ctx, "parse message ", "conversationID", conversationID, "msg", v)
 			isHistory = utils.GetSwitchFromOptions(v.Options, constant.IsHistory)
@@ -261,9 +261,9 @@ func (c *Conversation) doMsgNew(c2v common.Cmd2Value) {
 			copier.Copy(msg, v)
 			msg.Content = string(v.Content)
 
-			var attachedInfo sdk_struct.AttachedInfoElem
-			_ = utils.JsonStringToStruct(v.AttachedInfo, &attachedInfo)
-			msg.AttachedInfoElem = &attachedInfo
+			// var attachedInfo sdk_struct.AttachedInfoElem
+			// _ = utils.JsonStringToStruct(v.AttachedInfo, &attachedInfo)
+			// msg.AttachedInfoElem = &attachedInfo
 
 			//When the message has been marked and deleted by the cloud, it is directly inserted locally without any conversation and message update.
 			if msg.Status == constant.MsgStatusHasDeleted {
@@ -276,15 +276,16 @@ func (c *Conversation) doMsgNew(c2v common.Cmd2Value) {
 
 			msg.Status = constant.MsgStatusSendSuccess
 
+			//ken bug here
 			//De-analyze data
 			err := msgHandleByContentType(msg)
 			if err != nil {
-				log.ZError(ctx, "Parsing data error:", err, "type: ", msg.ContentType, "msg", msg)
-				continue
+				log.ZWarn(ctx, "Parsing data error, but continue processing:", err, "type: ", msg.ContentType, "msg", msg)
+				// Don't skip the message, continue processing it
 			}
 
 			if !isNotPrivate {
-				msg.AttachedInfoElem.IsPrivateChat = true
+				//msg.AttachedInfoElem.IsPrivateChat = true
 			}
 			if conversationID == "" {
 				log.ZError(ctx, "conversationID is empty", errors.New("conversationID is empty"), "msg", msg)
@@ -524,8 +525,8 @@ func (c *Conversation) doMsgSyncByReinstalled(c2v common.Cmd2Value) {
 
 			err := msgHandleByContentType(msg)
 			if err != nil {
-				log.ZError(ctx, "Parsing data error:", err, "type: ", msg.ContentType, "msg", msg)
-				continue
+				log.ZWarn(ctx, "Parsing data error, but continue processing:", err, "type: ", msg.ContentType, "msg", msg)
+				// Don't skip the message, continue processing it
 			}
 
 			if conversationID == "" {
