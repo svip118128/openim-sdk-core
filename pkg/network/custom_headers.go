@@ -18,6 +18,7 @@ var allowCustomHeaders = map[string]struct{}{
 	http.CanonicalHeaderKey("X-Version"):     {},
 	http.CanonicalHeaderKey("X-Brand"):       {},
 	http.CanonicalHeaderKey("X-BuildNumber"): {},
+	http.CanonicalHeaderKey("X-SecretKey"):   {},
 }
 
 // ApplyCustomHeaders 解析 JSON 字符串并设置白名单内的自定义头部，忽略空值和非法键。

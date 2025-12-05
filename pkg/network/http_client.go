@@ -47,6 +47,89 @@ type ApiResponse struct {
 	Data    json.RawMessage `json:"data"`
 }
 
+// addSignatureToRequest generates and adds HMAC signature to request headers
+func addSignatureToRequest(ctx context.Context, request *http.Request, bodyData []byte, api string, secretKey string) error {
+	// Extract custom headers from request (that were already added)
+	customHeaders := extractHeadersFromRequest(request)
+	
+	// Extract path from API endpoint - ensure it starts with /
+	path := api
+	if !bytes.HasPrefix([]byte(path), []byte("/")) {
+		path = "/" + path
+	}
+	
+	// Parse body as JSON
+	var bodyObj interface{}
+	if len(bodyData) > 0 {
+		if err := json.Unmarshal(bodyData, &bodyObj); err != nil {
+			// If body is not valid JSON, use empty object
+			bodyObj = map[string]interface{}{}
+		}
+	} else {
+		bodyObj = map[string]interface{}{}
+	}
+	
+	// Get method from request
+	method := request.Method
+	if method == "" {
+		method = http.MethodPost
+	}
+	
+	// Extract signature parameters from headers
+	params := ExtractSignatureParamsFromHeaders(customHeaders, secretKey)
+	
+	// Override with dynamic values
+	params.Method = method
+	params.Path = path
+	params.Body = bodyObj
+	
+	// Generate signature
+	signature, err := GenerateSignature(params)
+	if err != nil {
+		log.ZWarn(ctx, "failed to generate signature", err)
+		return err
+	}
+	
+	// Add signature to request header (others are already set)
+	request.Header.Set("X-Signature", signature)
+	
+	log.ZDebug(ctx, "signature added to request",
+		"path", path,
+		"method", method,
+		"timestamp", params.Timestamp,
+		"nonce", params.Nonce,
+		"operationID", params.OperationID,
+	)
+	
+	return nil
+}
+
+// extractHeadersFromRequest extracts X-* headers from HTTP request
+func extractHeadersFromRequest(request *http.Request) map[string]string {
+	headers := make(map[string]string)
+	headerNames := []string{
+		"X-Platform",
+		"X-Device-Id",
+		"X-Channel",
+		"X-PackageName",
+		"X-Version",
+		"X-Brand",
+		"X-BuildNumber",
+		"X-Token",
+		"X-Timestamp",
+		"X-Nonce",
+		"X-OperationId",
+	}
+	
+	for _, name := range headerNames {
+		if value := request.Header.Get(name); value != "" {
+			headers[name] = value
+		}
+	}
+	
+	return headers
+}
+
 // ApiPost performs an HTTP POST request to a specified API endpoint.
 // It serializes the request object, sends it to the API, and unmarshals the response into the resp object.
 // It handles logging, error wrapping, and operation ID validation.
@@ -97,12 +180,25 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 	request.ContentLength = int64(len(reqBody))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("operationID", operationID)
-	request.Header.Set("token", ctxInfo.Token())
+	request.Header.Set("X-Token", ctxInfo.Token())
 	request.Header.Set("Accept-Encoding", "gzip")
+	
+	// Apply custom headers from context
 	if headersJSON := ctxInfo.CustomHeadersJSON(); headersJSON != "" {
 		if err := ApplyCustomHeaders(request.Header, headersJSON); err != nil {
 			log.ZWarn(ctx, "apply custom headers failed", err, "headersJSON", headersJSON)
 		}
+	}
+	
+	// Extract secretKey from request header (set by ApplyCustomHeaders)
+	secretKey := request.Header.Get("X-SecretKey")
+	if secretKey == "" {
+		log.ZWarn(ctx, "X-SecretKey not found in headers, signature generation may fail", nil)
+	}
+	
+	// Auto-generate and add signature
+	if err := addSignatureToRequest(ctx, request, reqBody, api, secretKey); err != nil {
+		log.ZWarn(ctx, "failed to add signature to request", err, "api", api)
 	}
 
 	// Send the request and receive the response.
