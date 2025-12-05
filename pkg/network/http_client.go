@@ -97,7 +97,7 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 	request.ContentLength = int64(len(reqBody))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("operationID", operationID)
-	request.Header.Set("token", ctxInfo.Token())
+	request.Header.Set("X-Token", ctxInfo.Token())
 	request.Header.Set("Accept-Encoding", "gzip")
 	if headersJSON := ctxInfo.CustomHeadersJSON(); headersJSON != "" {
 		if err := ApplyCustomHeaders(request.Header, headersJSON); err != nil {
