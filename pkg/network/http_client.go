@@ -96,16 +96,67 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 	log.ZDebug(ctx, "ApiRequest", "url", reqUrl, "token", ctxInfo.Token(), "body", string(reqBody))
 	request.ContentLength = int64(len(reqBody))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("operationID", operationID)
-	request.Header.Set("X-Token", ctxInfo.Token())
+	//request.Header.Set("operationID", operationID)
 	request.Header.Set("Accept-Encoding", "gzip")
-	if headersJSON := ctxInfo.CustomHeadersJSON(); headersJSON != "" {
-		if err := ApplyCustomHeaders(request.Header, headersJSON); err != nil {
-			log.ZWarn(ctx, "apply custom headers failed", err, "headersJSON", headersJSON)
+
+	headersJSON := ctxInfo.CustomHeadersJSON()
+	customHeaders, err := ParseCustomHeaders(headersJSON)
+	if err != nil {
+		log.ZWarn(ctx, "parse custom headers failed", err, "headersJSON", headersJSON)
+		customHeaders = &CustomHeaderValues{}
+	}
+
+	token := ctxInfo.Token()
+	if token == "" {
+		token = "xxx"
+	}
+
+	secret := ctxInfo.Secret()
+	if secret != "" {
+		path := ExtractPathFromURL(reqUrl)
+		platform := customHeaders.Platform
+		if platform == 0 {
+			platform = ctxInfo.PlatformID()
+		}
+
+		signParams := GenerateSign(SignConfig{
+			Method:      http.MethodPost,
+			Path:        path,
+			Body:        string(reqBody),
+			Secret:      secret,
+			Platform:    platform,
+			DeviceID:    customHeaders.DeviceID,
+			Channel:     customHeaders.Channel,
+			PackageName: customHeaders.PackageName,
+			Version:     customHeaders.Version,
+			Brand:       customHeaders.Brand,
+			BuildNumber: customHeaders.BuildNumber,
+			Token:       token,
+		})
+
+		request.Header.Set("X-Platform", fmt.Sprintf("%d", platform))
+		request.Header.Set("X-Device-Id", customHeaders.DeviceID)
+		request.Header.Set("X-Channel", customHeaders.Channel)
+		request.Header.Set("X-PackageName", customHeaders.PackageName)
+		request.Header.Set("X-Version", customHeaders.Version)
+		request.Header.Set("X-Brand", customHeaders.Brand)
+		request.Header.Set("X-BuildNumber", customHeaders.BuildNumber)
+		request.Header.Set("X-Token", token)
+		request.Header.Set("X-Nonce", signParams.Nonce)
+		request.Header.Set("X-OperationId", signParams.OperationID)
+		request.Header.Set("X-Timestamp", signParams.Timestamp)
+		request.Header.Set("X-Signature", signParams.Signature)
+	} else {
+		request.Header.Set("X-Token", token)
+		if headersJSON != "" {
+			if err := ApplyCustomHeaders(request.Header, headersJSON); err != nil {
+				log.ZWarn(ctx, "apply custom headers failed", err, "headersJSON", headersJSON)
+			}
 		}
 	}
 
-	// Send the request and receive the response.
+	log.ZDebug(ctx, "ApiRequest headers", "headers", request.Header)
+
 	response, err := apiClient.Do(request)
 	if err != nil {
 		log.ZError(ctx, "ApiRequest", err, "type", "network error")

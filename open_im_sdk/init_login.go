@@ -95,6 +95,13 @@ func SetCustomHTTPHeader(headersJSON string) {
 	IMUserContext.SetCustomHTTPHeader(headersJSON)
 }
 
+func SetSecret(secret string) {
+	if IMUserContext == nil {
+		return
+	}
+	IMUserContext.SetSecret(secret)
+}
+
 func Login(callback open_im_sdk_callback.Base, operationID string, userID, token string) {
 	call(callback, operationID, IMUserContext.Login, userID, token)
 }

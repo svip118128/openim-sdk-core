@@ -277,6 +277,13 @@ func (u *UserContext) SetCustomHTTPHeader(headersJSON string) {
 	}
 }
 
+func (u *UserContext) SetSecret(secret string) {
+	if u.info == nil {
+		return
+	}
+	u.info.SetSecret(secret)
+}
+
 func (u *UserContext) GetLoginUserID() string {
 	return u.loginUserID
 }

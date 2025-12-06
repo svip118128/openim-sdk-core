@@ -38,17 +38,20 @@ const (
 type GlobalConfig struct {
 	UserID string
 	Token  string
+	Secret string
 	// CustomHTTPHeaderJSON 支持以 JSON 字符串形式传入自定义 HTTP 头部（仅网络层白名单键生效）。
 	CustomHTTPHeaderJSON string
 
 	*sdk_struct.IMConfig
 
 	customHeaderMu sync.RWMutex
+	secretMu       sync.RWMutex
 }
 
 type ContextInfo interface {
 	UserID() string
 	Token() string
+	Secret() string
 	PlatformID() int32
 	ApiAddr() string
 	WsAddr() string
@@ -106,6 +109,12 @@ func (i *info) UserID() string {
 
 func (i *info) Token() string {
 	return i.conf.Token
+}
+
+func (i *info) Secret() string {
+	i.conf.secretMu.RLock()
+	defer i.conf.secretMu.RUnlock()
+	return i.conf.Secret
 }
 
 func (i *info) PlatformID() int32 {
@@ -181,7 +190,7 @@ func (g *GlobalConfig) SetCustomHTTPHeaderJSON(headersJSON string) error {
 		g.customHeaderMu.Unlock()
 		return nil
 	}
-	var headers map[string]string
+	var headers map[string]interface{}
 	if err := json.Unmarshal([]byte(headersJSON), &headers); err != nil {
 		return err
 	}
@@ -189,4 +198,13 @@ func (g *GlobalConfig) SetCustomHTTPHeaderJSON(headersJSON string) error {
 	g.CustomHTTPHeaderJSON = headersJSON
 	g.customHeaderMu.Unlock()
 	return nil
+}
+
+func (g *GlobalConfig) SetSecret(secret string) {
+	if g == nil {
+		return
+	}
+	g.secretMu.Lock()
+	g.Secret = secret
+	g.secretMu.Unlock()
 }
