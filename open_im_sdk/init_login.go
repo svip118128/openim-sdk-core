@@ -89,17 +89,43 @@ func GetLoginUserID() string {
 
 // SetCustomHTTPHeader 设置 SDK 所有 HTTP 请求的自定义头部（仅支持网络层白名单字段），传入 JSON 字符串。
 func SetCustomHTTPHeader(operationID string, headersJSON string) {
+	ctx := mcontext.NewCtx(operationID)
+	log.ZInfo(ctx, "SetCustomHTTPHeader called", "operationID", operationID, "headersJSONLength", len(headersJSON), "headersJSONPreview", func() string {
+		if len(headersJSON) > 100 {
+			return headersJSON[:100] + "..."
+		}
+		return headersJSON
+	}())
 	if IMUserContext == nil {
+		log.ZWarn(ctx, "SetCustomHTTPHeader: IMUserContext is nil", nil)
+		return
+	}
+	if headersJSON == "" {
+		log.ZWarn(ctx, "SetCustomHTTPHeader: headersJSON is empty string", nil)
 		return
 	}
 	IMUserContext.SetCustomHTTPHeader(headersJSON)
+	log.ZInfo(ctx, "SetCustomHTTPHeader completed successfully")
 }
 
 func SetSecret(operationID string, secret string) {
+	ctx := mcontext.NewCtx(operationID)
+	log.ZInfo(ctx, "SetSecret called", "operationID", operationID, "secretLength", len(secret), "secretPreview", func() string {
+		if len(secret) > 10 {
+			return secret[:10] + "..."
+		}
+		return secret
+	}())
 	if IMUserContext == nil {
+		log.ZWarn(ctx, "SetSecret: IMUserContext is nil", nil)
+		return
+	}
+	if secret == "" {
+		log.ZWarn(ctx, "SetSecret: secret is empty string", nil)
 		return
 	}
 	IMUserContext.SetSecret(secret)
+	log.ZInfo(ctx, "SetSecret completed successfully")
 }
 
 func Login(callback open_im_sdk_callback.Base, operationID string, userID, token string) {
