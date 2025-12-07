@@ -87,7 +87,7 @@ func UnInitSDK(operationID string) {
 
 }
 
-func SetCustomHTTPHeader(headersJSON string) {
+func SetCustomHTTPHeader(operationID string, headersJSON string) {
 	if UserForSDK == nil {
 		return
 	}
