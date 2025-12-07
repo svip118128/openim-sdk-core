@@ -88,14 +88,14 @@ func GetLoginUserID() string {
 }
 
 // SetCustomHTTPHeader 设置 SDK 所有 HTTP 请求的自定义头部（仅支持网络层白名单字段），传入 JSON 字符串。
-func SetCustomHTTPHeader(headersJSON string) {
+func SetCustomHTTPHeader(operationID string, headersJSON string) {
 	if IMUserContext == nil {
 		return
 	}
 	IMUserContext.SetCustomHTTPHeader(headersJSON)
 }
 
-func SetSecret(secret string) {
+func SetSecret(operationID string, secret string) {
 	if IMUserContext == nil {
 		return
 	}
