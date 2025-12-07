@@ -109,6 +109,14 @@ func (w *WrapperInitLogin) InitSDK(_ js.Value, args []js.Value) interface{} {
 	callback := event_listener.NewConnCallback(utils.FirstLower(utils.GetSelfFuncName()), w.commonFunc)
 	return js.ValueOf(event_listener.NewCaller(open_im_sdk.InitSDK, callback, &args).SyncCall())
 }
+
+func (w *WrapperInitLogin) SetSecret(_ js.Value, args []js.Value) interface{} {
+    return event_listener.NewCaller(open_im_sdk.SetSecret, nil, &args).AsyncCallWithOutCallback()
+}
+
+func (w *WrapperInitLogin) SetCustomHTTPHeader(_ js.Value, args []js.Value) interface{} {
+    return event_listener.NewCaller(open_im_sdk.SetCustomHTTPHeader, nil, &args).AsyncCallWithOutCallback()
+}
 func (w *WrapperInitLogin) Login(_ js.Value, args []js.Value) interface{} {
 	listener := NewSetListener(w.WrapperCommon)
 	listener.SetAllListener()
