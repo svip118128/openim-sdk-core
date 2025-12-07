@@ -156,11 +156,22 @@ func (r *ReflectCall) asyncCallWithOutCallback() {
 
 	r.callback.SetOperationID(r.arguments[0].String())
 	//strings.SplitAfter()
+	funcParamsCount := typeFuncName.NumIn()
+	argsCount := len(r.arguments)
+	if argsCount != funcParamsCount {
+		panic("args count mismatch: expected " + strconv.Itoa(funcParamsCount) + ", got " + strconv.Itoa(argsCount))
+	}
 	for i := 0; i < len(r.arguments); i++ {
 		//log.NewDebug(r.callback.GetOperationID(), "type is ", typeFuncName.In(temp).Kind(), r.arguments[i].IsNaN())
 		switch typeFuncName.In(i).Kind() {
 		case reflect.String:
 			convertValue := r.arguments[i].String()
+			log.ZInfo(ctx, "Processing string argument", "index", i, "valueLength", len(convertValue), "valuePreview", func() string {
+				if len(convertValue) > 50 {
+					return convertValue[:50] + "..."
+				}
+				return convertValue
+			}())
 			if !strings.HasPrefix(convertValue, "<number: ") {
 				values = append(values, reflect.ValueOf(convertValue))
 			} else {
@@ -179,6 +190,11 @@ func (r *ReflectCall) asyncCallWithOutCallback() {
 		}
 	}
 	go func() {
+		defer func() {
+			if rc := recover(); rc != nil {
+				r.ErrHandle(rc)
+			}
+		}()
 
 		returnValues := funcName.Call(values)
 		if len(returnValues) != 0 {
@@ -199,7 +215,9 @@ func (r *ReflectCall) asyncCallWithOutCallback() {
 			}
 			r.callback.SetData(result).SendMessage()
 		} else {
-			r.callback.SetErrCode(200).SetErrMsg(errors.New("null string").Error()).SendMessage()
+			// For functions that don't return values (like SetSecret, SetCustomHTTPHeader),
+			// return success with empty string data
+			r.callback.SetErrCode(0).SetErrMsg("").SetData("").SendMessage()
 		}
 	}()
 

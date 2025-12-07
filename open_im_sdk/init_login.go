@@ -61,11 +61,11 @@ func InitSDK(listener open_im_sdk_callback.OnConnListener, operationID string, c
 	// localLog.NewPrivateLog("", configArgs.LogLevel)
 	ctx := mcontext.NewCtx(operationID)
 	if !strings.Contains(configArgs.ApiAddr, "http") {
-		log.ZError(ctx, "api is http protocol, api format is invalid", nil)
+		// log.ZError(ctx, "api is http protocol, api format is invalid", nil)
 		return false
 	}
 	if !strings.Contains(configArgs.WsAddr, "ws") {
-		log.ZError(ctx, "ws is ws protocol, ws format is invalid", nil)
+		// log.ZError(ctx, "ws is ws protocol, ws format is invalid", nil)
 		return false
 	}
 
@@ -94,7 +94,7 @@ func SetCustomHTTPHeader(operationID string, headersJSON string) {
 	UserForSDK.SetCustomHTTPHeader(headersJSON)
 }
 
-func SetSecret(secret string) {
+func SetSecret(operationID string, secret string) {
 	if UserForSDK == nil {
 		return
 	}
