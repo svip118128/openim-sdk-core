@@ -28,6 +28,7 @@ func GetConfig() *sdk_struct.IMConfig {
 	cf.WsAddr = WSADDR
 	cf.DataDir = "./"
 	cf.LogLevel = LogLevel
+	cf.IsExternalExtensions = true
 	cf.IsLogStandardOutput = true
 	cf.LogFilePath = ""
 	return &cf

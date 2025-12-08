@@ -64,9 +64,6 @@ func (g *Group) JoinGroup(ctx context.Context, groupID, reqMsg string, joinSourc
 	if err := g.joinGroup(ctx, req); err != nil {
 		return err
 	}
-	//if err := g.SyncSelfGroupApplications(ctx, groupID); err != nil {
-	//	return err
-	//}
 	return nil
 }
 
@@ -203,6 +200,22 @@ func (g *Group) GetJoinedGroupListPage(ctx context.Context, offset, count int32)
 }
 
 func (g *Group) GetSpecifiedGroupsInfo(ctx context.Context, groupIDs []string) ([]*model_struct.LocalGroup, error) {
+	g.groupSyncMutex.Lock()
+	defer g.groupSyncMutex.Unlock()
+
+	_, err := g.db.GetVersionSync(ctx, g.groupTableName(), g.loginUserID)
+	if err != nil {
+		if !errs.ErrRecordNotFound.Is(err) {
+			return nil, err
+		}
+
+		err := g.IncrSyncJoinGroup(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+	}
+
 	dataFetcher := datafetcher.NewDataFetcher(
 		g.db,
 		g.groupTableName(),
@@ -225,7 +238,7 @@ func (g *Group) GetSpecifiedGroupsInfo(ctx context.Context, groupIDs []string) (
 			return datautil.Batch(ServerGroupToLocalGroup, serverGroupInfo), nil
 		},
 	)
-	return dataFetcher.FetchMissingAndCombineLocal(ctx, groupIDs)
+	return dataFetcher.FetchMissingAndFillLocal(ctx, groupIDs)
 }
 
 func (g *Group) SearchGroups(ctx context.Context, param sdk_params_callback.SearchGroupsParam) ([]*model_struct.LocalGroup, error) {
@@ -509,34 +522,8 @@ func (g *Group) HandlerGroupApplication(ctx context.Context, req *group.GroupApp
 	return nil
 }
 
-func (g *Group) CheckLocalGroupFullSync(ctx context.Context) (bool, error) {
-	lvs, err := g.db.GetVersionSync(ctx, g.groupTableName(), g.loginUserID)
-	if err != nil {
-		return false, err
-	}
-	groups, err := g.db.GetGroups(ctx, lvs.UIDList)
-	if err != nil {
-		return false, err
-	}
-	if len(groups) != len(lvs.UIDList) {
-		return false, nil
-	}
-	return true, nil
-}
-
-func (g *Group) CheckGroupMemberFullSync(ctx context.Context, groupID string) (bool, error) {
-	lvs, err := g.db.GetVersionSync(ctx, g.groupAndMemberVersionTableName(), groupID)
-	if err != nil {
-		return false, err
-	}
-	members, err := g.db.GetGroupMemberListByGroupID(ctx, groupID)
-	if err != nil {
-		return false, err
-	}
-	if len(members) != len(lvs.UIDList) {
-		return false, nil
-	}
-	return true, nil
+func (g *Group) GetGroupMemberNameAndFaceURL(ctx context.Context, groupID string, userIDs []string) (map[string]*model_struct.LocalGroupMember, error) {
+	return g.GetGroupMembersInfo(ctx, groupID, userIDs)
 }
 
 func (g *Group) GetGroupApplicationUnhandledCount(ctx context.Context, req *sdk_params_callback.GetGroupApplicationUnhandledCountReq) (int32, error) {

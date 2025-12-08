@@ -548,14 +548,9 @@ func (c *Conversation) faceURLAndNicknameHandle(ctx context.Context, self, other
 	if err != nil {
 		return append(self, others...)
 	}
-	userInfo, err := c.db.GetLoginUser(ctx, c.loginUserID)
-	if err != nil {
-		log.ZError(ctx, "GetLoginUser failed", err)
-		return append(self, others...)
-	}
 	switch lc.ConversationType {
 	case constant.SingleChatType:
-		c.singleHandle(ctx, self, others, lc, userInfo)
+		c.singleHandle(ctx, self, others, lc)
 	case constant.ReadGroupChatType:
 		c.groupHandle(ctx, self, others, lc)
 	}
@@ -566,10 +561,11 @@ func (c *Conversation) faceURLAndNicknameHandle(ctx context.Context, self, other
 // It updates the SenderFaceURL and SenderNickname fields for messages in the `self` list
 // using the logged-in user's information, and for messages in the `others` list
 // using the other party's information if available in the conversation.
-func (c *Conversation) singleHandle(_ context.Context, self, others []*model_struct.LocalChatLog, lc *model_struct.LocalConversation, userInfo *model_struct.LocalUser) {
-	if len(self) > 0 && userInfo != nil {
-		for _, chatLog := range self {
-			if chatLog.Status != constant.MsgStatusHasDeleted {
+func (c *Conversation) singleHandle(ctx context.Context, self, others []*model_struct.LocalChatLog, lc *model_struct.LocalConversation) {
+	if len(self) > 0 {
+		userInfo, err := c.db.GetLoginUser(ctx, c.loginUserID)
+		if err == nil {
+			for _, chatLog := range self {
 				chatLog.SenderFaceURL = userInfo.FaceURL
 				chatLog.SenderNickname = userInfo.Nickname
 			}
@@ -594,15 +590,11 @@ func (c *Conversation) groupHandle(ctx context.Context, self, others []*model_st
 	allSenders := datautil.Slice(allMessage, func(e *model_struct.LocalChatLog) string {
 		return e.SendID
 	})
-	userIDs := datautil.Distinct(allSenders)
-	specialUsersInfo, missKeys := c.user.UserCache().BatchGetSpecialUser(ctx, userIDs)
-
-	groupMap, err := c.group.GetGroupMembersInfo(ctx, lc.GroupID, missKeys)
+	groupMap, err := c.group.GetGroupMemberNameAndFaceURL(ctx, lc.GroupID, datautil.Distinct(allSenders))
 	if err != nil {
 		log.ZError(ctx, "get group member info err", err)
 		return
 	}
-	specialUsers := make(map[string]*model_struct.LocalUser)
 	for _, chatLog := range allMessage {
 		if g, ok := groupMap[chatLog.SendID]; ok { // If group member info is successfully retrieved
 			log.ZDebug(ctx, "find in GetGroupMemberNameAndFaceURL", "sendID", chatLog.SendID, "faceURL", g.FaceURL, "nickName", g.Nickname)
@@ -610,27 +602,15 @@ func (c *Conversation) groupHandle(ctx context.Context, self, others []*model_st
 				chatLog.SenderFaceURL = g.FaceURL
 				chatLog.SenderNickname = g.Nickname
 			}
-		} else if u, ok := specialUsersInfo[chatLog.SendID]; ok {
-			if u.FaceURL != "" && u.Nickname != "" {
-				chatLog.SenderFaceURL = u.FaceURL
-				chatLog.SenderNickname = u.Nickname
-			}
 		} else { // Otherwise, retrieve from local temporary cache
-			// Maybe it's a user information that doesn't exist on the server, but has sent a message before or admin user.
-			userInfo, err := c.user.GetUserInfoWithCache(ctx, chatLog.SendID)
+			faceURL, name, err := c.getUserNameAndFaceURL(ctx, chatLog.SendID)
 			if err != nil {
-				userInfo = &model_struct.LocalUser{UserID: chatLog.SendID}
+				log.ZWarn(ctx, "getUserNameAndFaceURL error", err, "senderID", chatLog.SendID)
+			} else if faceURL != "" && name != "" {
+				log.ZDebug(ctx, "find in getUserNameAndFaceURL", "sendID", chatLog.SendID, "faceURL", faceURL, "nickName", name)
+				chatLog.SenderFaceURL = faceURL
+				chatLog.SenderNickname = name
 			}
-			if userInfo.FaceURL != "" && userInfo.Nickname != "" {
-				log.ZDebug(ctx, "find in getUserNameAndFaceURL", "sendID", chatLog.SendID)
-				chatLog.SenderFaceURL = userInfo.FaceURL
-				chatLog.SenderNickname = userInfo.Nickname
-			}
-			specialUsers[chatLog.SendID] = userInfo
 		}
 	}
-	if len(specialUsers) > 0 {
-		c.user.UserCache().BatchAddSpecialUser(specialUsers)
-	}
-
 }

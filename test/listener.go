@@ -17,7 +17,6 @@ package test
 import (
 	"context"
 	"fmt"
-
 	"github.com/openimsdk/tools/log"
 )
 
@@ -73,7 +72,7 @@ func (o *onConversationListener) OnNewConversation(conversationList string) {
 }
 
 func (o *onConversationListener) OnConversationChanged(conversationList string) {
-	log.ZInfo(o.ctx, "OnConversationChanged", "####### conversationList", conversationList)
+	log.ZInfo(o.ctx, "OnConversationChanged", "conversationList", conversationList)
 }
 
 func (o *onConversationListener) OnTotalUnreadMessageCountChanged(totalUnreadCount int32) {
@@ -232,23 +231,15 @@ type onUserListener struct {
 func (o *onUserListener) OnSelfInfoUpdated(userInfo string) {
 	log.ZDebug(context.Background(), "OnSelfInfoUpdated", "userInfo", userInfo)
 }
-
+func (o *onUserListener) OnUserCommandAdd(userInfo string) {
+	log.ZDebug(context.Background(), "OnUserCommandAdd", "blackInfo", userInfo)
+}
+func (o *onUserListener) OnUserCommandDelete(userInfo string) {
+	log.ZDebug(context.Background(), "OnUserCommandDelete", "blackInfo", userInfo)
+}
+func (o *onUserListener) OnUserCommandUpdate(userInfo string) {
+	log.ZDebug(context.Background(), "OnUserCommandUpdate", "blackInfo", userInfo)
+}
 func (o *onUserListener) OnUserStatusChanged(statusMap string) {
 	log.ZDebug(context.Background(), "OnUserStatusChanged", "OnUserStatusChanged", statusMap)
-}
-
-type onMessageKvInfoListener struct {
-	ctx context.Context
-}
-
-func (o *onMessageKvInfoListener) OnMessageKvInfoChanged(messageChangedList string) {
-	log.ZDebug(o.ctx, "OnMessageKvInfoChanged", "messageChangedList", messageChangedList)
-}
-
-type onCustomBusinessListener struct {
-	ctx context.Context
-}
-
-func (o *onCustomBusinessListener) OnRecvCustomBusinessMessage(businessMessage string) {
-	log.ZDebug(o.ctx, "OnRecvCustomBusinessMessage", "businessMessage", businessMessage)
 }

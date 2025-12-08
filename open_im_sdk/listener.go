@@ -19,30 +19,34 @@ import (
 )
 
 func SetGroupListener(listener open_im_sdk_callback.OnGroupListener) {
-	listenerCall(IMUserContext.SetGroupListener, listener)
+	listenerCall(UserForSDK.SetGroupListener, listener)
 }
 
 func SetConversationListener(listener open_im_sdk_callback.OnConversationListener) {
-	listenerCall(IMUserContext.SetConversationListener, listener)
+	listenerCall(UserForSDK.SetConversationListener, listener)
 }
 
 func SetAdvancedMsgListener(listener open_im_sdk_callback.OnAdvancedMsgListener) {
-	listenerCall(IMUserContext.SetAdvancedMsgListener, listener)
+	listenerCall(UserForSDK.SetAdvancedMsgListener, listener)
+}
+
+func SetBatchMsgListener(listener open_im_sdk_callback.OnBatchMsgListener) {
+	listenerCall(UserForSDK.SetBatchMsgListener, listener)
 }
 
 func SetUserListener(listener open_im_sdk_callback.OnUserListener) {
-	listenerCall(IMUserContext.SetUserListener, listener)
+	listenerCall(UserForSDK.SetUserListener, listener)
 
 }
 
 func SetFriendListener(listener open_im_sdk_callback.OnFriendshipListener) {
-	listenerCall(IMUserContext.SetFriendshipListener, listener)
+	listenerCall(UserForSDK.SetFriendshipListener, listener)
 }
 
 func SetCustomBusinessListener(listener open_im_sdk_callback.OnCustomBusinessListener) {
-	listenerCall(IMUserContext.SetCustomBusinessListener, listener)
+	listenerCall(UserForSDK.SetCustomBusinessListener, listener)
 }
 
 func SetMessageKvInfoListener(listener open_im_sdk_callback.OnMessageKvInfoListener) {
-	listenerCall(IMUserContext.SetMessageKvInfoListener, listener)
+	listenerCall(UserForSDK.SetMessageKvInfoListener, listener)
 }

@@ -59,6 +59,15 @@ func (c userCallback) OnUserStatusChanged(statusMap string) {
 func (userCallback) OnSelfInfoUpdated(callbackData string) {
 
 }
+func (userCallback) OnUserCommandAdd(callbackData string) {
+
+}
+func (userCallback) OnUserCommandUpdate(callbackData string) {
+
+}
+func (userCallback) OnUserCommandDelete(callbackData string) {
+
+}
 
 type SingleMessage struct {
 	SendID      string
@@ -102,10 +111,6 @@ func (m *MsgListenerCallBak) OnRecvNewMessage(message string) {
 			append(m.GroupDelay[sm.GroupID], &SingleMessage{SendID: sm.SendID, ClientMsgID: sm.ClientMsgID, Delay: GetRelativeServerTime() - sm.SendTime})
 	default:
 	}
-
-}
-
-func (m *MsgListenerCallBak) OnMsgEdited(message string) {
 
 }
 

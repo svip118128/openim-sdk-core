@@ -6,13 +6,11 @@ import (
 	"testing"
 
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
-	"github.com/openimsdk/openim-sdk-core/v3/sdk_struct"
 )
 
 func TestName(t *testing.T) {
-	conf := ccontext.GlobalConfig{
-		IMConfig: &sdk_struct.IMConfig{ApiAddr: "http://127.0.0.1:8080"},
-	}
+	var conf ccontext.GlobalConfig
+	conf.ApiAddr = "http://127.0.0.1:8080"
 	ctx := ccontext.WithInfo(context.Background(), &conf)
 	ctx = ccontext.WithOperationID(ctx, "123456")
 	var resp any

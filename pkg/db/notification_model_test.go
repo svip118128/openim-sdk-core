@@ -8,7 +8,6 @@ import (
 )
 
 func Test_BatchInsertNotificationSeq(t *testing.T) {
-	t.Skip("依赖数据库状态，默认跳过")
 	ctx := context.Background()
 	db, err := NewDataBase(ctx, "1695766238", "./", 6)
 	if err != nil {

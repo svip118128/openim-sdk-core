@@ -3,13 +3,13 @@ package module
 import (
 	"context"
 	"fmt"
+
 	"sync"
-	"time"
 
 	"github.com/openimsdk/openim-sdk-core/v3/internal/interaction"
-	"github.com/openimsdk/openim-sdk-core/v3/msgtest/sdk_user_simulator"
-	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
+
+	"time"
 
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/common"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/constant"
@@ -123,15 +123,13 @@ func newUserCtx(userID, token string, imConfig sdk_struct.IMConfig) context.Cont
 	return ccontext.WithInfo(context.Background(), &ccontext.GlobalConfig{
 		UserID:   userID,
 		Token:    token,
-		IMConfig: &imConfig})
+		IMConfig: imConfig})
 }
 
 func NewUser(userID, token string, timeOffset int64, p *PressureTester, imConfig sdk_struct.IMConfig, opts ...func(core *SendMsgUser)) *SendMsgUser {
 	pushMsgAndMaxSeqCh := make(chan common.Cmd2Value, 1000)
 	ctx := newUserCtx(userID, token, imConfig)
-	longConnMgr := interaction.NewLongConnMgr(ctx, func(m map[string][]int32) {}, pushMsgAndMaxSeqCh, nil)
-	l := sdk_user_simulator.NewTestConnListener()
-	longConnMgr.SetListener(func() open_im_sdk_callback.OnConnListener { return l })
+	longConnMgr := interaction.NewLongConnMgr(ctx, &ConnListener{}, func(m map[string][]int32) {}, pushMsgAndMaxSeqCh, nil)
 	core := &SendMsgUser{
 		pushMsgAndMaxSeqCh:      pushMsgAndMaxSeqCh,
 		longConnMgr:             longConnMgr,
@@ -152,7 +150,7 @@ func NewUser(userID, token string, timeOffset int64, p *PressureTester, imConfig
 	baseCtx, cancel := context.WithCancel(ctx)
 	core.cancelFunc = cancel
 	go core.recvPushMsg(baseCtx)
-	go core.longConnMgr.Run(baseCtx, baseCtx)
+	go core.longConnMgr.Run(baseCtx)
 	return core
 }
 
@@ -344,6 +342,21 @@ func (u *UserListener) OnSelfInfoUpdated(userInfo string) {
 }
 
 func (u *UserListener) OnUserStatusChanged(userOnlineStatus string) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (u *UserListener) OnUserCommandAdd(userCommand string) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (u *UserListener) OnUserCommandDelete(userCommand string) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (u *UserListener) OnUserCommandUpdate(userCommand string) {
 	//TODO implement me
 	panic("implement me")
 }

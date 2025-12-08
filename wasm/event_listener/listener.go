@@ -170,10 +170,6 @@ func (a AdvancedMsgCallback) OnRecvOnlineOnlyMessage(message string) {
 	a.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(message).SendMessage()
 }
 
-func (a AdvancedMsgCallback) OnMsgEdited(message string) {
-	a.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(message).SendMessage()
-}
-
 type BaseCallback struct {
 	CallbackWriter
 }
@@ -304,6 +300,21 @@ func (u *UploadFileCallback) Complete(size int64, url string, typ int) {
 	u.globalEvent.SetEvent(utils.GetSelfFuncName()).SetData(utils.StructToJsonString(mReply)).SendMessage()
 }
 
+type BatchMessageCallback struct {
+	CallbackWriter
+}
+
+func NewBatchMessageCallback(callback *js.Value) *BatchMessageCallback {
+	return &BatchMessageCallback{CallbackWriter: NewEventData(callback)}
+}
+
+func (b *BatchMessageCallback) OnRecvNewMessages(messageList string) {
+	b.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(messageList).SendMessage()
+}
+func (b *BatchMessageCallback) OnRecvOfflineNewMessages(messageList string) {
+	b.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(messageList).SendMessage()
+}
+
 type FriendCallback struct {
 	CallbackWriter
 }
@@ -404,6 +415,15 @@ func NewUserCallback(callback *js.Value) *UserCallback {
 	return &UserCallback{CallbackWriter: NewEventData(callback)}
 }
 func (u UserCallback) OnSelfInfoUpdated(userInfo string) {
+	u.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(userInfo).SendMessage()
+}
+func (u UserCallback) OnUserCommandAdd(userInfo string) {
+	u.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(userInfo).SendMessage()
+}
+func (u UserCallback) OnUserCommandDelete(userInfo string) {
+	u.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(userInfo).SendMessage()
+}
+func (u UserCallback) OnUserCommandUpdate(userInfo string) {
 	u.CallbackWriter.SetEvent(utils.GetSelfFuncName()).SetData(userInfo).SendMessage()
 }
 

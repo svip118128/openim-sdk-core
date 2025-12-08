@@ -94,7 +94,7 @@ func (d *DataBase) GetAllSingleConversationIDList(ctx context.Context) (result [
 	d.mRWMutex.RLock()
 	defer d.mRWMutex.RUnlock()
 	var c model_struct.LocalConversation
-	return result, errs.WrapMsg(d.conn.WithContext(ctx).Model(&c).Where("conversation_type = ?", constant.SingleChatType).Pluck("conversation_id", &result).Error, "GetAllSingleConversationIDList failed ")
+	return result, errs.WrapMsg(d.conn.WithContext(ctx).Model(&c).Where("conversation_type = ?", constant.SingleChatType).Pluck("conversation_id", &result).Error, "GetAllConversationIDList failed ")
 }
 
 func (d *DataBase) GetConversationListSplitDB(ctx context.Context, offset, count int) ([]*model_struct.LocalConversation, error) {
@@ -340,20 +340,6 @@ func (d *DataBase) IncrConversationUnreadCount(ctx context.Context, conversation
 		return errs.WrapMsg(errors.New("RowsAffected == 0"), "no update")
 	}
 	return errs.WrapMsg(t.Error, "IncrConversationUnreadCount failed")
-}
-
-func (d *DataBase) GetTotalUnreadMsgCountNewerDB(ctx context.Context) (totalUnreadCount int32, err error) {
-	d.mRWMutex.RLock()
-	defer d.mRWMutex.RUnlock()
-	var result []int64
-	err = d.conn.WithContext(ctx).Model(&model_struct.LocalConversation{}).Where("recv_msg_opt < ? ", constant.ReceiveNotNotifyMessage).Pluck("unread_count", &result).Error
-	if err != nil {
-		return totalUnreadCount, errs.WrapMsg(errors.New("GetTotalUnreadMsgCount err"), "GetTotalUnreadMsgCount err")
-	}
-	for _, v := range result {
-		totalUnreadCount += int32(v)
-	}
-	return totalUnreadCount, nil
 }
 
 func (d *DataBase) GetTotalUnreadMsgCountDB(ctx context.Context) (totalUnreadCount int32, err error) {

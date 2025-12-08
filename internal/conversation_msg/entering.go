@@ -129,9 +129,8 @@ func (e *typing) sendMsg(ctx context.Context, conversation *model_struct.LocalCo
 	wsMsgData.Content = []byte(s.Content)
 	wsMsgData.CreateTime = s.CreateTime
 	wsMsgData.Options = options
-	//var sendMsgResp sdkws.UserSendMsgResp
-	//err = e.conv.LongConnMgr.SendReqWaitResp(ctx, &wsMsgData, constant.SendMsg, &sendMsgResp)
-	err = e.conv.sendMsg(ctx, &s, &wsMsgData, nil)
+	var sendMsgResp sdkws.UserSendMsgResp
+	err = e.conv.LongConnMgr.SendReqWaitResp(ctx, &wsMsgData, constant.SendMsg, &sendMsgResp)
 	if err != nil {
 		log.ZError(ctx, "typing msg to server failed", err, "message", s)
 		return err

@@ -22,9 +22,9 @@ import (
 
 	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
-	"github.com/openimsdk/openim-sdk-core/v3/pkg/cliconf"
 	pbConstant "github.com/openimsdk/protocol/constant"
 
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/constant"
 	"github.com/openimsdk/openim-sdk-core/v3/sdk_struct"
 	"github.com/openimsdk/openim-sdk-core/v3/version"
 
@@ -37,10 +37,15 @@ func GetSdkVersion() string {
 }
 
 const (
+	rotateCount  uint = 1
 	rotationTime uint = 24
 )
 
 func InitSDK(listener open_im_sdk_callback.OnConnListener, operationID string, config string) bool {
+	if UserForSDK != nil {
+		fmt.Println(operationID, "Initialize multiple times, use the existing ", UserForSDK, " Previous configuration ", UserForSDK.ImConfig(), " now configuration: ", config)
+		return true
+	}
 	var configArgs sdk_struct.IMConfig
 	if err := json.Unmarshal([]byte(config), &configArgs); err != nil {
 		fmt.Println(operationID, "Unmarshal failed ", err.Error(), config)
@@ -49,16 +54,11 @@ func InitSDK(listener open_im_sdk_callback.OnConnListener, operationID string, c
 	if configArgs.PlatformID == 0 {
 		return false
 	}
-	var logRemainCount uint32
-	if configArgs.LogRemainCount > 0 {
-		logRemainCount = configArgs.LogRemainCount
-	} else {
-		logRemainCount = 1
-	}
-	if err := log.InitLoggerFromConfig("open-im-sdk-core", "", configArgs.SystemType, pbConstant.PlatformID2Name[int(configArgs.PlatformID)], int(configArgs.LogLevel), configArgs.IsLogStandardOutput, false, configArgs.LogFilePath, uint(logRemainCount), rotationTime, version.Version, true); err != nil {
+	if err := log.InitLoggerFromConfig("open-im-sdk-core", "", configArgs.SystemType, pbConstant.PlatformID2Name[int(configArgs.PlatformID)], int(configArgs.LogLevel), configArgs.IsLogStandardOutput, false, configArgs.LogFilePath, rotateCount, rotationTime, version.Version, true); err != nil {
 		fmt.Println(operationID, "log init failed ", err.Error())
 	}
 	fmt.Println("init log success")
+	// localLog.NewPrivateLog("", configArgs.LogLevel)
 	ctx := mcontext.NewCtx(operationID)
 	if !strings.Contains(configArgs.ApiAddr, "http") {
 		log.ZError(ctx, "api is http protocol, api format is invalid", nil)
@@ -74,68 +74,76 @@ func InitSDK(listener open_im_sdk_callback.OnConnListener, operationID string, c
 		log.ZError(ctx, "listener or config is nil", nil)
 		return false
 	}
-	return IMUserContext.InitSDK(&configArgs, listener)
+	UserForSDK = new(LoginMgr)
+	return UserForSDK.InitSDK(configArgs, listener)
 }
-func UnInitSDK(_ string) {
-	IMUserContext.UnInitSDK()
-}
-
-func GetLoginUserID() string {
-	if IMUserContext == nil {
-		return ""
-	}
-	return IMUserContext.GetLoginUserID()
-}
-
-// SetCustomHTTPHeader 设置 SDK 所有 HTTP 请求的自定义头部（仅支持网络层白名单字段），传入 JSON 字符串。
-func SetCustomHTTPHeader(headersJSON string) {
-	if IMUserContext == nil {
+func UnInitSDK(operationID string) {
+	if UserForSDK == nil {
+		fmt.Println(operationID, "UserForSDK is nil,")
 		return
 	}
-	IMUserContext.SetCustomHTTPHeader(headersJSON)
+	UserForSDK.UnInitSDK()
+	UserForSDK = nil
+
+}
+
+func SetCustomHTTPHeader(headersJSON string) {
+	if UserForSDK == nil {
+		return
+	}
+	UserForSDK.SetCustomHTTPHeader(headersJSON)
 }
 
 func SetSecret(secret string) {
-	if IMUserContext == nil {
+	if UserForSDK == nil {
 		return
 	}
-	IMUserContext.SetSecret(secret)
+	UserForSDK.SetSecret(secret)
 }
 
 func Login(callback open_im_sdk_callback.Base, operationID string, userID, token string) {
-	call(callback, operationID, IMUserContext.Login, userID, token)
+	call(callback, operationID, UserForSDK.Login, userID, token)
 }
 
 func Logout(callback open_im_sdk_callback.Base, operationID string) {
-	call(callback, operationID, IMUserContext.Logout)
+	call(callback, operationID, UserForSDK.Logout)
 }
 
 func SetAppBackgroundStatus(callback open_im_sdk_callback.Base, operationID string, isBackground bool) {
-	call(callback, operationID, IMUserContext.SetAppBackgroundStatus, isBackground)
+	call(callback, operationID, UserForSDK.SetAppBackgroundStatus, isBackground)
 }
 func NetworkStatusChanged(callback open_im_sdk_callback.Base, operationID string) {
-	call(callback, operationID, IMUserContext.NetworkStatusChanged)
+	call(callback, operationID, UserForSDK.NetworkStatusChanged)
 }
 
 func GetLoginStatus(operationID string) int {
-	return IMUserContext.GetLoginStatus(ccontext.WithOperationID(context.Background(), operationID))
+	if UserForSDK == nil {
+		return constant.Uninitialized
+	}
+	return UserForSDK.GetLoginStatus(ccontext.WithOperationID(context.Background(), operationID))
 }
 
-func (u *UserContext) Login(ctx context.Context, userID, token string) error {
-	cliconf.SetLoginUserID(u.loginUserID)
+func GetLoginUserID() string {
+	if UserForSDK == nil {
+		return ""
+	}
+	return UserForSDK.GetLoginUserID()
+}
+
+func (u *LoginMgr) Login(ctx context.Context, userID, token string) error {
 	return u.login(ctx, userID, token)
 }
 
-func (u *UserContext) Logout(ctx context.Context) error {
+func (u *LoginMgr) Logout(ctx context.Context) error {
 	return u.logout(ctx, false)
 }
 
-func (u *UserContext) SetAppBackgroundStatus(ctx context.Context, isBackground bool) error {
+func (u *LoginMgr) SetAppBackgroundStatus(ctx context.Context, isBackground bool) error {
 	return u.setAppBackgroundStatus(ctx, isBackground)
 }
-func (u *UserContext) NetworkStatusChanged(ctx context.Context) {
+func (u *LoginMgr) NetworkStatusChanged(ctx context.Context) {
 	u.longConnMgr.Close(ctx)
 }
-func (u *UserContext) GetLoginStatus(ctx context.Context) int {
+func (u *LoginMgr) GetLoginStatus(ctx context.Context) int {
 	return u.getLoginStatus(ctx)
 }

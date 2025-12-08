@@ -29,56 +29,60 @@ import (
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/db/model_struct"
 	"github.com/openimsdk/openim-sdk-core/v3/sdk_struct"
 	"github.com/openimsdk/protocol/msg"
-	"github.com/openimsdk/protocol/sdkws"
 	"github.com/openimsdk/tools/errs"
+
+	"github.com/openimsdk/protocol/sdkws"
 	"github.com/openimsdk/tools/log"
 )
 
 const (
-	connectPullNums       = 1
-	defaultPullNums       = 10
-	SplitPullMsgNum       = 100
+	connectPullNums = 1
+	defaultPullNums = 10
+	SplitPullMsgNum = 100
+
 	pullMsgGoroutineLimit = 10
-	maxConversations      = 500
-	synMaxConversations   = 100
 )
 
 // MsgSyncer is a central hub for message relay, responsible for sequential message gap pulling,
 // handling network events, and managing app foreground and background events.
 type MsgSyncer struct {
-	loginUserID            string                // login user ID
-	longConnMgr            *LongConnMgr          // long connection manager
-	PushMsgAndMaxSeqCh     chan common.Cmd2Value // channel for receiving push messages and the maximum SEQ number
-	conversationEventQueue chan common.Cmd2Value // storage and session triggering
-	syncedMaxSeqs          map[string]int64      // map of the maximum synced SEQ numbers for all group IDs
-	syncedMaxSeqsLock      sync.RWMutex          // syncedMaxSeqs map lock
-	db                     db_interface.DataBase // data store
-	reinstalled            bool                  //true if the app was uninstalled and reinstalled
-	isSyncing              bool                  // indicates whether data is being synced
-	isSyncingLock          sync.Mutex            // lock for syncing state
-}
+	loginUserID       string                // login user ID
+	longConnMgr       *LongConnMgr          // long connection manager
+	recvCh            chan common.Cmd2Value // channel for receiving push messages and the maximum SEQ number
+	conversationCh    chan common.Cmd2Value // storage and session triggering
+	syncedMaxSeqs     map[string]int64      // map of the maximum synced SEQ numbers for all group IDs
+	syncedMaxSeqsLock sync.RWMutex          // syncedMaxSeqs map lock
+	db                db_interface.DataBase // data store
+	syncTimes         int                   // times of sync
+	ctx               context.Context       // context
+	reinstalled       bool                  //true if the app was uninstalled and reinstalled
+	isSyncing         bool                  // indicates whether data is being synced
+	isSyncingLock     sync.Mutex            // lock for syncing state
 
-func (m *MsgSyncer) SetLoginUserID(loginUserID string) {
-	m.loginUserID = loginUserID
-}
-
-func (m *MsgSyncer) SetDataBase(db db_interface.DataBase) {
-	m.db = db
 }
 
 // NewMsgSyncer creates a new instance of the message synchronizer.
-func NewMsgSyncer(conversationEventQueue, PushMsgAndMaxSeqCh chan common.Cmd2Value,
-	longConnMgr *LongConnMgr) *MsgSyncer {
-	return &MsgSyncer{
-		longConnMgr:            longConnMgr,
-		PushMsgAndMaxSeqCh:     PushMsgAndMaxSeqCh,
-		conversationEventQueue: conversationEventQueue,
-		syncedMaxSeqs:          make(map[string]int64),
+func NewMsgSyncer(ctx context.Context, conversationCh, recvCh chan common.Cmd2Value,
+	loginUserID string, longConnMgr *LongConnMgr, db db_interface.DataBase, syncTimes int) (*MsgSyncer, error) {
+	m := &MsgSyncer{
+		loginUserID:    loginUserID,
+		longConnMgr:    longConnMgr,
+		recvCh:         recvCh,
+		conversationCh: conversationCh,
+		ctx:            ctx,
+		syncedMaxSeqs:  make(map[string]int64),
+		db:             db,
+		syncTimes:      syncTimes,
 	}
+	if err := m.loadSeq(ctx); err != nil {
+		log.ZError(ctx, "loadSeq err", err)
+		return nil, err
+	}
+	return m, nil
 }
 
-// LoadSeq seq The db reads the data to the memory,set syncedMaxSeqs
-func (m *MsgSyncer) LoadSeq(ctx context.Context) error {
+// seq The db reads the data to the memory,set syncedMaxSeqs
+func (m *MsgSyncer) loadSeq(ctx context.Context) error {
 	conversationIDList, err := m.db.GetAllConversationIDList(ctx)
 	if err != nil {
 		log.ZError(ctx, "get conversation id list failed", err)
@@ -170,10 +174,10 @@ func (m *MsgSyncer) DoListener(ctx context.Context) {
 	}()
 	for {
 		select {
-		case cmd := <-m.PushMsgAndMaxSeqCh:
+		case cmd := <-m.recvCh:
 			m.handlePushMsgAndEvent(cmd)
 		case <-ctx.Done():
-			log.ZInfo(ctx, "msg syncer done, sdk logout.....")
+			log.ZInfo(m.ctx, "msg syncer done, sdk logout.....")
 			return
 		}
 	}
@@ -204,76 +208,14 @@ func (m *MsgSyncer) handlePushMsgAndEvent(cmd common.Cmd2Value) {
 			m.doWakeupDataSync(cmd.Ctx)
 		} else {
 			log.ZWarn(cmd.Ctx, "syncing, ignore wake up event", nil, "cmd", cmd.Cmd, "value", cmd.Value)
+
 		}
 	case constant.CmdIMMessageSync:
-		if conversationIDs, ok := cmd.Value.([]string); ok {
-			log.ZInfo(cmd.Ctx, "manual trigger IM message synchronization", "cmd", cmd.Cmd, "value", cmd.Value)
-			m.doIMMessageSync(cmd.Ctx, conversationIDs)
-		} else {
-			log.ZWarn(cmd.Ctx, "invalid value type for IMMessageSync", nil, "cmd", cmd.Cmd, "value", cmd.Value)
-		}
+		log.ZInfo(cmd.Ctx, "manually trigger IM message synchronization", "cmd", cmd.Cmd, "value", cmd.Value)
+		m.doIMMessageSync(cmd.Ctx)
 
 	case constant.CmdPushMsg:
 		m.doPushMsg(cmd.Ctx, cmd.Value.(*sdkws.PushMessages))
-	}
-}
-
-func (m *MsgSyncer) getNeedSyncConversations(ctx context.Context, maxSeqToSync map[string]int64) map[string][2]int64 {
-	needSyncSeqMap := make(map[string][2]int64)
-	//when app reinstalled do not pull notifications messages.
-	if m.reinstalled {
-		notificationsSeqMap := make(map[string]int64)
-		messagesSeqMap := make(map[string]int64)
-		for conversationID, seq := range maxSeqToSync {
-			if IsNotification(conversationID) {
-				if seq != 0 { // seq is 0, no need to sync
-					notificationsSeqMap[conversationID] = seq
-				}
-			} else {
-				messagesSeqMap[conversationID] = seq
-			}
-		}
-
-		var notificationSeqs []*model_struct.NotificationSeqs
-
-		for conversationID, seq := range notificationsSeqMap {
-			notificationSeqs = append(notificationSeqs, &model_struct.NotificationSeqs{
-				ConversationID: conversationID,
-				Seq:            seq,
-			})
-			m.syncedMaxSeqs[conversationID] = seq
-		}
-
-		if len(notificationSeqs) > 0 {
-			err := m.db.BatchInsertNotificationSeq(ctx, notificationSeqs)
-			if err != nil {
-				log.ZWarn(ctx, "BatchInsertNotificationSeq err", err)
-			}
-		}
-
-		for conversationID, maxSeq := range messagesSeqMap {
-			if syncedMaxSeq, ok := m.syncedMaxSeqs[conversationID]; ok {
-				if maxSeq > syncedMaxSeq {
-					needSyncSeqMap[conversationID] = [2]int64{syncedMaxSeq + 1, maxSeq}
-				}
-			} else {
-				needSyncSeqMap[conversationID] = [2]int64{0, maxSeq}
-			}
-		}
-		return needSyncSeqMap
-	} else {
-		for conversationID, maxSeq := range maxSeqToSync {
-			if syncedMaxSeq, ok := m.syncedMaxSeqs[conversationID]; ok {
-				if maxSeq > syncedMaxSeq {
-					needSyncSeqMap[conversationID] = [2]int64{syncedMaxSeq + 1, maxSeq}
-				}
-			} else {
-				if maxSeq != 0 { // seq is 0, no need to sync
-					needSyncSeqMap[conversationID] = [2]int64{0, maxSeq}
-				}
-			}
-		}
-		return needSyncSeqMap
 	}
 }
 
@@ -327,7 +269,7 @@ func (m *MsgSyncer) compareSeqsAndBatchSync(ctx context.Context, maxSeqToSync ma
 			}
 			m.reinstalled = false
 		}()
-		_ = m.syncAndTriggerReinstallMsgs(ctx, needSyncSeqMap, pullNums)
+		_ = m.syncAndTriggerReinstallMsgs(m.ctx, needSyncSeqMap, pullNums)
 	} else {
 		for conversationID, maxSeq := range maxSeqToSync {
 			if syncedMaxSeq, ok := m.syncedMaxSeqs[conversationID]; ok {
@@ -340,7 +282,7 @@ func (m *MsgSyncer) compareSeqsAndBatchSync(ctx context.Context, maxSeqToSync ma
 				}
 			}
 		}
-		_ = m.syncAndTriggerMsgs(ctx, needSyncSeqMap, pullNums)
+		_ = m.syncAndTriggerMsgs(m.ctx, needSyncSeqMap, pullNums)
 	}
 }
 
@@ -407,54 +349,47 @@ func (m *MsgSyncer) pushTriggerAndSync(ctx context.Context, pushMessages map[str
 func (m *MsgSyncer) doConnected(ctx context.Context) {
 	reinstalled := m.reinstalled
 	if reinstalled {
-		common.DispatchSyncFlag(ctx, constant.AppDataSyncStart, m.conversationEventQueue)
+		common.TriggerCmdSyncFlag(m.ctx, constant.AppDataSyncStart, m.conversationCh)
 	} else {
-		common.DispatchSyncFlag(ctx, constant.MsgSyncBegin, m.conversationEventQueue)
+		common.TriggerCmdSyncFlag(m.ctx, constant.MsgSyncBegin, m.conversationCh)
 	}
 	var resp sdkws.GetMaxSeqResp
-	if err := m.longConnMgr.SendReqWaitResp(ctx, &sdkws.GetMaxSeqReq{UserID: m.loginUserID}, constant.GetNewestSeq, &resp); err != nil {
-		log.ZError(ctx, "get max seq error", err)
-		common.DispatchSyncFlag(ctx, constant.MsgSyncFailed, m.conversationEventQueue)
+	if err := m.longConnMgr.SendReqWaitResp(m.ctx, &sdkws.GetMaxSeqReq{UserID: m.loginUserID}, constant.GetNewestSeq, &resp); err != nil {
+		log.ZError(m.ctx, "get max seq error", err)
+		common.TriggerCmdSyncFlag(m.ctx, constant.MsgSyncFailed, m.conversationCh)
 		return
 	} else {
-		log.ZDebug(ctx, "get max seq success", "resp", resp.MaxSeqs)
+		log.ZDebug(m.ctx, "get max seq success", "resp", resp.MaxSeqs)
 	}
 	m.compareSeqsAndBatchSync(ctx, resp.MaxSeqs, connectPullNums)
 	if reinstalled {
-		common.DispatchSyncFlag(ctx, constant.AppDataSyncFinish, m.conversationEventQueue)
+		common.TriggerCmdSyncFlag(m.ctx, constant.AppDataSyncFinish, m.conversationCh)
 	} else {
-		common.DispatchSyncFlag(ctx, constant.MsgSyncEnd, m.conversationEventQueue)
+		common.TriggerCmdSyncFlag(m.ctx, constant.MsgSyncEnd, m.conversationCh)
 	}
 }
 
 func (m *MsgSyncer) doWakeupDataSync(ctx context.Context) {
-	common.DispatchSyncData(ctx, m.conversationEventQueue)
+	common.TriggerCmdSyncData(ctx, m.conversationCh)
 	var resp sdkws.GetMaxSeqResp
-	if err := m.longConnMgr.SendReqWaitResp(ctx, &sdkws.GetMaxSeqReq{UserID: m.loginUserID}, constant.GetNewestSeq, &resp); err != nil {
-		log.ZError(ctx, "get max seq error", err)
+	if err := m.longConnMgr.SendReqWaitResp(m.ctx, &sdkws.GetMaxSeqReq{UserID: m.loginUserID}, constant.GetNewestSeq, &resp); err != nil {
+		log.ZError(m.ctx, "get max seq error", err)
 		return
 	} else {
-		log.ZDebug(ctx, "get max seq success", "resp", resp.MaxSeqs)
+		log.ZDebug(m.ctx, "get max seq success", "resp", resp.MaxSeqs)
 	}
 	m.compareSeqsAndBatchSync(ctx, resp.MaxSeqs, defaultPullNums)
 }
 
-func (m *MsgSyncer) doIMMessageSync(ctx context.Context, conversationIDs []string) {
-
-	resp := msg.GetConversationsHasReadAndMaxSeqResp{}
-	req := msg.GetConversationsHasReadAndMaxSeqReq{UserID: m.loginUserID, ConversationIDs: conversationIDs}
-	err := m.longConnMgr.SendReqWaitResp(ctx, &req, constant.GetConvMaxReadSeq, &resp)
-	if err != nil {
-		log.ZWarn(ctx, "GetConvMaxReadSeq SendReqWaitResp err", err)
+func (m *MsgSyncer) doIMMessageSync(ctx context.Context) {
+	var resp sdkws.GetMaxSeqResp
+	if err := m.longConnMgr.SendReqWaitResp(m.ctx, &sdkws.GetMaxSeqReq{UserID: m.loginUserID}, constant.GetNewestSeq, &resp); err != nil {
+		log.ZError(m.ctx, "get max seq error", err)
 		return
 	} else {
-		log.ZDebug(ctx, "GetConvMaxReadSeq SendReqWaitResp success", "resp", resp.Seqs)
+		log.ZDebug(m.ctx, "get max seq success", "resp", resp.MaxSeqs)
 	}
-	maxSeqMap := make(map[string]int64)
-	for conversationID, seqs := range resp.Seqs {
-		maxSeqMap[conversationID] = seqs.MaxSeq
-	}
-	m.compareSeqsAndBatchSync(ctx, maxSeqMap, defaultPullNums)
+	m.compareSeqsAndBatchSync(ctx, resp.MaxSeqs, defaultPullNums)
 }
 
 func IsNotification(conversationID string) bool {
@@ -481,7 +416,13 @@ func (m *MsgSyncer) syncAndTriggerMsgs(ctx context.Context, seqMap map[string][2
 			msgNum += int(oneConversationSyncNum)
 		} else {
 			// For regular conversations, ensure msgNum is the minimum of oneConversationSyncNum and syncMsgNum
-			msgNum += int(min(oneConversationSyncNum, syncMsgNum))
+			currentSyncMsgNum := int64(0)
+			if oneConversationSyncNum > syncMsgNum {
+				currentSyncMsgNum = syncMsgNum
+			} else {
+				currentSyncMsgNum = oneConversationSyncNum
+			}
+			msgNum += int(currentSyncMsgNum)
 		}
 
 		// If accumulated msgNum reaches SplitPullMsgNum, trigger a batch pull
@@ -536,22 +477,20 @@ func (m *MsgSyncer) syncAndTriggerReinstallMsgs(ctx context.Context, seqMap map[
 				// For regular conversations, ensure msgNum is the minimum of oneConversationSyncNum and syncMsgNum
 				msgNum += int(min(oneConversationSyncNum, syncMsgNum))
 			}
-
 			if msgNum >= SplitPullMsgNum {
 				resp, err := m.pullMsgBySeqRange(ctx, tempSeqMap, syncMsgNum)
 				if err != nil {
 					log.ZError(ctx, "syncMsgFromServer err", err, "tempSeqMap", tempSeqMap)
 					return err
 				}
-
 				m.checkMessagesAndGetLastMessage(ctx, resp.Msgs)
 				_ = m.triggerReinstallConversation(ctx, resp.Msgs, total)
 				_ = m.triggerNotification(ctx, resp.NotificationMsgs)
-
 				for conversationID, seqs := range tempSeqMap {
 					m.syncedMaxSeqs[conversationID] = seqs[1]
 				}
 
+				// renew
 				tempSeqMap = make(map[string][2]int64, 50)
 				msgNum = 0
 			}
@@ -567,7 +506,6 @@ func (m *MsgSyncer) syncAndTriggerReinstallMsgs(ctx context.Context, seqMap map[
 			m.checkMessagesAndGetLastMessage(ctx, resp.Msgs)
 			_ = m.triggerReinstallConversation(ctx, resp.Msgs, total)
 			_ = m.triggerNotification(ctx, resp.NotificationMsgs)
-
 			for conversationID, seqs := range tempSeqMap {
 				m.syncedMaxSeqs[conversationID] = seqs[1]
 			}
@@ -578,7 +516,6 @@ func (m *MsgSyncer) syncAndTriggerReinstallMsgs(ctx context.Context, seqMap map[
 
 	return nil
 }
-
 func (m *MsgSyncer) checkMessagesAndGetLastMessage(ctx context.Context, messages map[string]*sdkws.PullMsgs) {
 	var conversationIDs []string
 
@@ -677,7 +614,7 @@ func (m *MsgSyncer) syncMsgBySeqs(ctx context.Context, conversationID string, se
 // triggers a conversation with a new message.
 func (m *MsgSyncer) triggerConversation(ctx context.Context, msgs map[string]*sdkws.PullMsgs) error {
 	if len(msgs) > 0 {
-		err := common.DispatchNewMessage(ctx, sdk_struct.CmdNewMsgComeToConversation{Msgs: msgs}, m.conversationEventQueue)
+		err := common.TriggerCmdNewMsgCome(ctx, sdk_struct.CmdNewMsgComeToConversation{Msgs: msgs}, m.conversationCh)
 		if err != nil {
 			log.ZError(ctx, "triggerCmdNewMsgCome err", err, "msgs", msgs)
 		}
@@ -692,24 +629,24 @@ func (m *MsgSyncer) triggerConversation(ctx context.Context, msgs map[string]*sd
 // triggers a conversation with a new message.
 func (m *MsgSyncer) triggerReinstallConversation(ctx context.Context, msgs map[string]*sdkws.PullMsgs, total int) (err error) {
 	if len(msgs) > 0 {
-		err = common.DispatchMsgSyncInReinstall(ctx, sdk_struct.CmdMsgSyncInReinstall{
+		err = common.TriggerCmdMsgSyncInReinstall(ctx, sdk_struct.CmdMsgSyncInReinstall{
 			Msgs:  msgs,
 			Total: total,
-		}, m.conversationEventQueue)
+		}, m.conversationCh)
 		if err != nil {
-			log.ZError(ctx, "DispatchMsgSyncInReinstall err", err, "msgs", msgs)
+			log.ZError(ctx, "triggerCmdNewMsgCome err", err, "msgs", msgs)
 		}
-		log.ZDebug(ctx, "triggerReinstallConversation", "length", len(msgs))
+		log.ZDebug(ctx, "triggerConversation", "msgs", msgs)
 		return err
 	} else {
-		log.ZDebug(ctx, "triggerReinstallConversation is nil")
+		log.ZDebug(ctx, "triggerConversation is nil", "msgs", msgs)
 	}
 	return nil
 }
 
 func (m *MsgSyncer) triggerNotification(ctx context.Context, msgs map[string]*sdkws.PullMsgs) error {
 	if len(msgs) > 0 {
-		common.DispatchNotification(ctx, sdk_struct.CmdNewMsgComeToConversation{Msgs: msgs}, m.conversationEventQueue)
+		common.TriggerCmdNotification(ctx, sdk_struct.CmdNewMsgComeToConversation{Msgs: msgs}, m.conversationCh)
 	} else {
 		log.ZDebug(ctx, "triggerNotification is nil", "notifications", msgs)
 	}

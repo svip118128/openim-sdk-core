@@ -39,29 +39,3 @@ func TestName(t *testing.T) {
 		t.Fatal("OperationID not match")
 	}
 }
-
-func TestSetCustomHTTPHeaderJSON(t *testing.T) {
-	conf := &GlobalConfig{}
-	valid := `{"Authorization":"token","X-Nonce":"abc"}`
-
-	if err := conf.SetCustomHTTPHeaderJSON(valid); err != nil {
-		t.Fatalf("SetCustomHTTPHeaderJSON failed: %v", err)
-	}
-	if got := conf.CustomHTTPHeaderJSON; got != valid {
-		t.Fatalf("CustomHTTPHeaderJSON not stored, got %s", got)
-	}
-
-	if err := conf.SetCustomHTTPHeaderJSON("{invalid"); err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-	if got := conf.CustomHTTPHeaderJSON; got != valid {
-		t.Fatalf("CustomHTTPHeaderJSON should not change on invalid input, got %s", got)
-	}
-
-	if err := conf.SetCustomHTTPHeaderJSON(""); err != nil {
-		t.Fatalf("clear CustomHTTPHeaderJSON failed: %v", err)
-	}
-	if conf.CustomHTTPHeaderJSON != "" {
-		t.Fatal("CustomHTTPHeaderJSON should be empty after clear")
-	}
-}

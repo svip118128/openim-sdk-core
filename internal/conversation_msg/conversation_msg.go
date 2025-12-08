@@ -10,7 +10,6 @@ import (
 
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/api"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/cache"
-	"github.com/openimsdk/protocol/msg"
 	"github.com/openimsdk/tools/utils/stringutil"
 
 	"github.com/openimsdk/openim-sdk-core/v3/internal/group"
@@ -19,6 +18,7 @@ import (
 	"github.com/openimsdk/openim-sdk-core/v3/internal/third/file"
 	"github.com/openimsdk/openim-sdk-core/v3/internal/user"
 	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/common"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/constant"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/db/db_interface"
@@ -42,7 +42,7 @@ import (
 
 const (
 	conversationSyncLimit       int64 = math.MaxInt64
-	searchMessageGoroutineLimit int   = 10
+	searchMessageGoroutineLimit       = 10
 )
 
 var SearchContentType = []int{constant.Text, constant.AtText, constant.File}
@@ -54,11 +54,12 @@ type Conversation struct {
 	ConversationListener        func() open_im_sdk_callback.OnConversationListener
 	msgListener                 func() open_im_sdk_callback.OnAdvancedMsgListener
 	msgKvListener               func() open_im_sdk_callback.OnMessageKvInfoListener
+	batchMsgListener            func() open_im_sdk_callback.OnBatchMsgListener
 	businessListener            func() open_im_sdk_callback.OnCustomBusinessListener
+	recvCh                      chan common.Cmd2Value
 	msgSyncerCh                 chan common.Cmd2Value
-	conversationEventQueue      chan common.Cmd2Value
 	loginUserID                 string
-	platform                    int32
+	platformID                  int32
 	DataDir                     string
 	relation                    *relation.Relation
 	group                       *group.Group
@@ -72,31 +73,10 @@ type Conversation struct {
 	msgOffset                   int
 	progress                    int
 	conversationSyncMutex       sync.Mutex
-	seqs                        map[string]*msg.Seqs
 
 	startTime time.Time
 
 	typing *typing
-}
-
-func (c *Conversation) ConversationEventQueue() chan common.Cmd2Value {
-	return c.conversationEventQueue
-}
-
-func (c *Conversation) SetDataBase(db db_interface.DataBase) {
-	c.db = db
-}
-
-func (c *Conversation) SetLoginUserID(loginUserID string) {
-	c.loginUserID = loginUserID
-}
-
-func (c *Conversation) SetPlatform(platform int32) {
-	c.platform = platform
-}
-
-func (c *Conversation) SetDataDir(DataDir string) {
-	c.DataDir = DataDir
 }
 
 func (c *Conversation) SetMsgListener(msgListener func() open_im_sdk_callback.OnAdvancedMsgListener) {
@@ -107,24 +87,30 @@ func (c *Conversation) SetMsgKvListener(msgKvListener func() open_im_sdk_callbac
 	c.msgKvListener = msgKvListener
 }
 
+func (c *Conversation) SetBatchMsgListener(batchMsgListener func() open_im_sdk_callback.OnBatchMsgListener) {
+	c.batchMsgListener = batchMsgListener
+}
+
 func (c *Conversation) SetBusinessListener(businessListener func() open_im_sdk_callback.OnCustomBusinessListener) {
 	c.businessListener = businessListener
 }
 
-func NewConversation(
-	longConnMgr *interaction.LongConnMgr,
-	msgSyncerCh chan common.Cmd2Value, conversationEventQueue chan common.Cmd2Value,
-	relation *relation.Relation,
-	group *group.Group, user *user.User,
+func NewConversation(ctx context.Context, longConnMgr *interaction.LongConnMgr, db db_interface.DataBase,
+	recvCh, msgSyncerCh chan common.Cmd2Value, relation *relation.Relation, group *group.Group, user *user.User,
 	file *file.File) *Conversation {
-	n := &Conversation{
+	info := ccontext.Info(ctx)
+	n := &Conversation{db: db,
 		LongConnMgr:                 longConnMgr,
+		recvCh:                      recvCh,
 		msgSyncerCh:                 msgSyncerCh,
-		conversationEventQueue:      conversationEventQueue,
+		loginUserID:                 info.UserID(),
+		platformID:                  info.PlatformID(),
+		DataDir:                     info.DataDir(),
 		relation:                    relation,
 		group:                       group,
 		user:                        user,
 		file:                        file,
+		IsExternalExtensions:        info.IsExternalExtensions(),
 		maxSeqRecorder:              NewMaxSeqRecorder(),
 		messagePullForwardEndSeqMap: cache.NewConversationSeqContextCache(),
 		messagePullReverseEndSeqMap: cache.NewConversationSeqContextCache(),
@@ -209,7 +195,7 @@ func (c *Conversation) initSyncer() {
 }
 
 func (c *Conversation) GetCh() chan common.Cmd2Value {
-	return c.conversationEventQueue
+	return c.recvCh
 }
 
 type onlineMsgKey struct {
@@ -450,8 +436,11 @@ func (c *Conversation) doMsgNew(c2v common.Cmd2Value) {
 	}
 	log.ZDebug(ctx, "before trigger msg", "cost time", time.Since(b).Seconds(), "len", len(allMsg))
 
-	c.newMessage(ctx, newMessages, conversationChangedSet, newConversationSet, onlineMap)
-
+	if c.batchMsgListener() != nil {
+		c.batchNewMessages(ctx, newMessages, conversationChangedSet, newConversationSet, onlineMap)
+	} else {
+		c.newMessage(ctx, newMessages, conversationChangedSet, newConversationSet, onlineMap)
+	}
 	if len(newConversationSet) > 0 {
 		c.doUpdateConversation(common.Cmd2Value{Value: common.UpdateConNode{Action: constant.NewConDirect, Args: utils.StructToJsonString(mapConversationToList(newConversationSet))}})
 	}
@@ -774,7 +763,9 @@ func (c *Conversation) batchNewMessages(ctx context.Context, newMessagesList sdk
 		}
 
 		if len(needNotificationMsgList) != 0 {
-			c.msgListener().OnRecvOfflineNewMessage(utils.StructToJsonString(needNotificationMsgList))
+			log.ZDebug(ctx, "before trigger OnRecvOfflineNewMessages", "needNotificationMsgList length", len(needNotificationMsgList), "needNotificationMsgList", needNotificationMsgList)
+			c.batchMsgListener().OnRecvOfflineNewMessages(utils.StructToJsonString(needNotificationMsgList))
+			log.ZDebug(ctx, "after trigger OnRecvOfflineNewMessages")
 		}
 	} else { // online
 		for _, w := range newMessagesList {
@@ -786,7 +777,9 @@ func (c *Conversation) batchNewMessages(ctx context.Context, newMessagesList sdk
 		}
 
 		if len(needNotificationMsgList) != 0 {
-			c.msgListener().OnRecvOnlineOnlyMessage(utils.StructToJsonString(needNotificationMsgList))
+			log.ZDebug(ctx, "before trigger OnRecvNewMessages", "needNotificationMsgList length", len(needNotificationMsgList), "needNotificationMsgList", needNotificationMsgList)
+			c.batchMsgListener().OnRecvNewMessages(utils.StructToJsonString(needNotificationMsgList))
+			log.ZDebug(ctx, "after trigger OnRecvNewMessages")
 		}
 	}
 }

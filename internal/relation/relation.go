@@ -24,22 +24,22 @@ const (
 	friendSyncLimit int64 = 10000
 )
 
-func NewRelation(conversationEventQueue chan common.Cmd2Value, user *user.User) *Relation {
-	r := &Relation{conversationEventQueue: conversationEventQueue, user: user}
+func NewFriend(loginUserID string, db db_interface.DataBase, user *user.User, conversationCh chan common.Cmd2Value) *Relation {
+	r := &Relation{loginUserID: loginUserID, db: db, user: user, conversationCh: conversationCh}
 	r.initSyncer()
 	return r
 }
 
 type Relation struct {
-	friendshipListener     open_im_sdk_callback.OnFriendshipListenerSdk
-	loginUserID            string
-	db                     db_interface.DataBase
-	user                   *user.User
-	friendSyncer           *syncer.Syncer[*model_struct.LocalFriend, relation.GetPaginationFriendsResp, [2]string]
-	blackSyncer            *syncer.Syncer[*model_struct.LocalBlack, syncer.NoResp, [2]string]
-	conversationEventQueue chan common.Cmd2Value
-	listenerForService     open_im_sdk_callback.OnListenerForService
-	relationSyncMutex      sync.Mutex
+	friendshipListener open_im_sdk_callback.OnFriendshipListenerSdk
+	loginUserID        string
+	db                 db_interface.DataBase
+	user               *user.User
+	friendSyncer       *syncer.Syncer[*model_struct.LocalFriend, relation.GetPaginationFriendsResp, [2]string]
+	blackSyncer        *syncer.Syncer[*model_struct.LocalBlack, syncer.NoResp, [2]string]
+	conversationCh     chan common.Cmd2Value
+	listenerForService open_im_sdk_callback.OnListenerForService
+	relationSyncMutex  sync.Mutex
 }
 
 func (r *Relation) initSyncer() {
@@ -51,7 +51,7 @@ func (r *Relation) initSyncer() {
 			return r.db.DeleteFriendDB(ctx, value.FriendUserID)
 		}),
 		syncer.WithUpdate[*model_struct.LocalFriend, relation.GetPaginationFriendsResp, [2]string](func(ctx context.Context, server, local *model_struct.LocalFriend) error {
-			r.user.UserCache().Delete(server.FriendUserID)
+			r.user.UserCache.Delete(server.FriendUserID)
 			return r.db.UpdateFriend(ctx, server)
 		}),
 		syncer.WithUUID[*model_struct.LocalFriend, relation.GetPaginationFriendsResp, [2]string](func(value *model_struct.LocalFriend) [2]string {
@@ -64,7 +64,7 @@ func (r *Relation) initSyncer() {
 				if server.Remark != "" {
 					server.Nickname = server.Remark
 				}
-				_ = common.DispatchUpdateConversation(ctx, common.UpdateConNode{
+				_ = common.TriggerCmdUpdateConversation(ctx, common.UpdateConNode{
 					Action: constant.UpdateConFaceUrlAndNickName,
 					Args: common.SourceIDAndSessionType{
 						SourceID:    server.FriendUserID,
@@ -72,8 +72,8 @@ func (r *Relation) initSyncer() {
 						FaceURL:     server.FaceURL,
 						Nickname:    server.Nickname,
 					},
-				}, r.conversationEventQueue)
-				_ = common.DispatchUpdateMessage(ctx, common.UpdateMessageNode{
+				}, r.conversationCh)
+				_ = common.TriggerCmdUpdateMessage(ctx, common.UpdateMessageNode{
 					Action: constant.UpdateMsgFaceUrlAndNickName,
 					Args: common.UpdateMessageInfo{
 						SessionType: constant.SingleChatType,
@@ -81,7 +81,7 @@ func (r *Relation) initSyncer() {
 						FaceURL:     server.FaceURL,
 						Nickname:    server.Nickname,
 					},
-				}, r.conversationEventQueue)
+				}, r.conversationCh)
 			case syncer.Delete:
 				log.ZDebug(ctx, "syncer OnFriendDeleted", "local", local)
 				r.friendshipListener.OnFriendDeleted(*local)
@@ -91,7 +91,7 @@ func (r *Relation) initSyncer() {
 					if server.Remark != "" {
 						server.Nickname = server.Remark
 					}
-					_ = common.DispatchUpdateConversation(ctx, common.UpdateConNode{
+					_ = common.TriggerCmdUpdateConversation(ctx, common.UpdateConNode{
 						Action: constant.UpdateConFaceUrlAndNickName,
 						Args: common.SourceIDAndSessionType{
 							SourceID:    server.FriendUserID,
@@ -99,8 +99,8 @@ func (r *Relation) initSyncer() {
 							FaceURL:     server.FaceURL,
 							Nickname:    server.Nickname,
 						},
-					}, r.conversationEventQueue)
-					_ = common.DispatchUpdateMessage(ctx, common.UpdateMessageNode{
+					}, r.conversationCh)
+					_ = common.TriggerCmdUpdateMessage(ctx, common.UpdateMessageNode{
 						Action: constant.UpdateMsgFaceUrlAndNickName,
 						Args: common.UpdateMessageInfo{
 							SessionType: constant.SingleChatType,
@@ -108,7 +108,7 @@ func (r *Relation) initSyncer() {
 							FaceURL:     server.FaceURL,
 							Nickname:    server.Nickname,
 						},
-					}, r.conversationEventQueue)
+					}, r.conversationCh)
 				}
 			}
 			return nil
@@ -160,14 +160,4 @@ func (r *Relation) SetListener(listener func() open_im_sdk_callback.OnFriendship
 
 func (r *Relation) SetListenerForService(listener open_im_sdk_callback.OnListenerForService) {
 	r.listenerForService = listener
-}
-
-// SetDataBase sets the DataBase field in Relation struct
-func (r *Relation) SetDataBase(db db_interface.DataBase) {
-	r.db = db
-}
-
-// SetLoginUserID sets the loginUserID field in Relation struct
-func (r *Relation) SetLoginUserID(loginUserID string) {
-	r.loginUserID = loginUserID
 }

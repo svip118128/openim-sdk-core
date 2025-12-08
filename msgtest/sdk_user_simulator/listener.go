@@ -1,7 +1,6 @@
 package sdk_user_simulator
 
 import (
-	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/constant"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/utils"
 	"github.com/openimsdk/openim-sdk-core/v3/sdk_struct"
@@ -53,6 +52,15 @@ func (c userCallback) OnUserStatusChanged(statusMap string) {
 func (userCallback) OnSelfInfoUpdated(callbackData string) {
 
 }
+func (userCallback) OnUserCommandAdd(callbackData string) {
+
+}
+func (userCallback) OnUserCommandUpdate(callbackData string) {
+
+}
+func (userCallback) OnUserCommandDelete(callbackData string) {
+
+}
 
 type SingleMessage struct {
 	SendID      string
@@ -90,7 +98,6 @@ func (m *MsgListenerCallBak) OnRecvC2CReadReceipt(msgReceiptList string) {
 }
 
 func (m *MsgListenerCallBak) OnMsgDeleted(s string) {}
-func (m *MsgListenerCallBak) OnMsgEdited(s string)  {}
 
 func (m *MsgListenerCallBak) OnRecvOfflineNewMessage(message string) {
 }
@@ -203,9 +210,6 @@ func (testGroupListener) OnGroupDismissed(callbackInfo string) {
 type testConnListener struct {
 }
 
-func NewTestConnListener() open_im_sdk_callback.OnConnListener {
-	return &testConnListener{}
-}
 func (t *testConnListener) OnUserTokenInvalid(errMsg string) {}
 
 func (t *testConnListener) OnUserTokenExpired() {

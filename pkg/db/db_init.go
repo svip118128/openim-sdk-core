@@ -184,6 +184,7 @@ func (d *DataBase) versionDataMigrate(ctx context.Context) error {
 			&model_struct.LocalUpload{},
 			&model_struct.LocalStranger{},
 			&model_struct.LocalSendingMessages{},
+			&model_struct.LocalUserCommand{},
 			&model_struct.LocalVersionSync{},
 		)
 		if err != nil {

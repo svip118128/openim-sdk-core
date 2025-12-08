@@ -68,11 +68,11 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 
 	// Deferred function to log the result of the API call.
 	defer func(start time.Time) {
-		elapsed := time.Since(start).Milliseconds()
+		elapsed := time.Since(start).String()
 		if err == nil {
-			log.ZDebug(ctx, "CallApi", "duration", fmt.Sprintf("%dms", elapsed), "api", api, "state", "success")
+			log.ZDebug(ctx, "CallApi success", "duration", elapsed, "api", api, "state", "success")
 		} else {
-			log.ZError(ctx, "CallApi", err, "duration", fmt.Sprintf("%dms", elapsed), "api", api, "state", "failed")
+			log.ZError(ctx, "CallApi error", err, "duration", elapsed, "api", api, "state", "failed")
 		}
 	}(time.Now())
 
@@ -92,11 +92,9 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 		return sdkerrs.ErrSdkInternal.WrapMsg("sdk http.NewRequestWithContext failed " + err.Error())
 	}
 
-	// Set headers for the request.
 	log.ZDebug(ctx, "ApiRequest", "url", reqUrl, "token", ctxInfo.Token(), "body", string(reqBody))
 	request.ContentLength = int64(len(reqBody))
 	request.Header.Set("Content-Type", "application/json")
-	//request.Header.Set("operationID", operationID)
 	request.Header.Set("Accept-Encoding", "gzip")
 
 	headersJSON := ctxInfo.CustomHeadersJSON()
@@ -148,6 +146,8 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 		request.Header.Set("X-Signature", signParams.Signature)
 	} else {
 		request.Header.Set("X-Token", token)
+		request.Header.Set("operationID", operationID)
+		request.Header.Set("token", ctxInfo.Token())
 		if headersJSON != "" {
 			if err := ApplyCustomHeaders(request.Header, headersJSON); err != nil {
 				log.ZWarn(ctx, "apply custom headers failed", err, "headersJSON", headersJSON)

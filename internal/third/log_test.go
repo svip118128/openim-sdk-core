@@ -8,7 +8,6 @@ import (
 )
 
 func TestLogMatch(t *testing.T) {
-	t.Skip("依赖具体日志文件命名，跳过")
 
 	filenames := []string{
 		"log1.txt",
@@ -43,7 +42,6 @@ func TestLogMatch(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	t.Skip("依赖本地文件系统，跳过")
 	dir := `C:\Users\openIM\Desktop\testlog`
 
 	dirs, err := os.ReadDir(dir)

@@ -65,12 +65,11 @@ func (r *Relation) IncrSyncFriends(ctx context.Context) error {
 	return friendSyncer.IncrementalSync()
 }
 
+func (r *Relation) friendListTableName() string {
+	return model_struct.LocalFriend{}.TableName()
+}
 func (r *Relation) IncrSyncFriendsWithLock(ctx context.Context) error {
 	r.relationSyncMutex.Lock()
 	defer r.relationSyncMutex.Unlock()
 	return r.IncrSyncFriends(ctx)
-}
-
-func (r *Relation) friendListTableName() string {
-	return model_struct.LocalFriend{}.TableName()
 }

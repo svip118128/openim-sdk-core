@@ -3,7 +3,6 @@ package conversation_msg
 import (
 	"context"
 	"fmt"
-	"github.com/openimsdk/protocol/msg"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -55,8 +54,6 @@ func (c *Conversation) GetAtAllTag(_ context.Context) string {
 }
 
 func (c *Conversation) GetOneConversation(ctx context.Context, sessionType int32, sourceID string) (*model_struct.LocalConversation, error) {
-	c.conversationSyncMutex.Lock()
-	defer c.conversationSyncMutex.Unlock()
 	conversationID := c.getConversationIDBySessionType(sourceID, int(sessionType))
 	lc, err := c.db.GetConversation(ctx, conversationID)
 	if err == nil {
@@ -83,9 +80,10 @@ func (c *Conversation) GetOneConversation(ctx context.Context, sessionType int32
 			newConversation.ShowName = g.GroupName
 			newConversation.FaceURL = g.FaceURL
 		}
-		err := c.db.InsertConversation(ctx, &newConversation)
-		if err != nil {
-			return nil, err
+		//double check if the conversation exists
+		lc, err := c.db.GetConversation(ctx, conversationID)
+		if err == nil {
+			return lc, nil
 		}
 		return &newConversation, nil
 	}
@@ -120,7 +118,7 @@ func (c *Conversation) SetConversationDraft(ctx context.Context, conversationID,
 			return err
 		}
 	}
-	_ = common.DispatchUpdateConversation(ctx, common.UpdateConNode{Action: constant.ConChange, Args: []string{conversationID}}, c.ConversationEventQueue())
+	_ = common.TriggerCmdUpdateConversation(ctx, common.UpdateConNode{Action: constant.ConChange, Args: []string{conversationID}}, c.GetCh())
 	return nil
 }
 
@@ -168,7 +166,7 @@ func (c *Conversation) updateMsgStatusAndTriggerConversation(ctx context.Context
 	}
 	lc.LatestMsg = utils.StructToJsonString(s)
 	lc.LatestMsgSendTime = sendTime
-	_ = common.DispatchUpdateConversation(ctx, common.UpdateConNode{ConID: lc.ConversationID, Action: constant.AddConOrUpLatMsg, Args: *lc}, c.ConversationEventQueue())
+	_ = common.TriggerCmdUpdateConversation(ctx, common.UpdateConNode{ConID: lc.ConversationID, Action: constant.AddConOrUpLatMsg, Args: *lc}, c.GetCh())
 }
 
 func (c *Conversation) fileName(ftype string, id string) string {
@@ -181,7 +179,7 @@ func (c *Conversation) checkID(ctx context.Context, s *sdk_struct.MsgStruct,
 		return nil, sdkerrs.ErrArgs
 	}
 	s.SendID = c.loginUserID
-	s.SenderPlatformID = c.platform
+	s.SenderPlatformID = c.platformID
 	lc := &model_struct.LocalConversation{LatestMsgSendTime: s.CreateTime}
 	//assemble messages and conversations based on single or group chat types
 	if recvID == "" {
@@ -314,7 +312,7 @@ func (c *Conversation) SendMessage(ctx context.Context, s *sdk_struct.MsgStruct,
 		}
 		lc.LatestMsg = utils.StructToJsonString(s)
 		log.ZDebug(ctx, "send message come here", "conversion", *lc)
-		_ = common.DispatchUpdateConversation(ctx, common.UpdateConNode{ConID: lc.ConversationID, Action: constant.AddConOrUpLatMsg, Args: *lc}, c.ConversationEventQueue())
+		_ = common.TriggerCmdUpdateConversation(ctx, common.UpdateConNode{ConID: lc.ConversationID, Action: constant.AddConOrUpLatMsg, Args: *lc}, c.GetCh())
 	}
 
 	var delFile []string
@@ -637,16 +635,13 @@ func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.Ms
 	}
 	wsMsgData.OfflinePushInfo = offlinePushInfo
 	s.Content = ""
-	var sendMsgResp msg.SendMsgResp
-	//err := c.LongConnMgr.SendReqWaitResp(ctx, &wsMsgData, constant.SendMsg, &sendMsgResp)
-	err := c.sendMsg(ctx, s, &wsMsgData, nil)
+	var sendMsgResp sdkws.UserSendMsgResp
+
+	err := c.LongConnMgr.SendReqWaitResp(ctx, &wsMsgData, constant.SendMsg, &sendMsgResp)
 	if err != nil {
 		//if send message network timeout need to double-check message has received by db.
 		if sdkerrs.ErrNetworkTimeOut.Is(err) && !isOnlineOnly {
-			oldMessage, err := c.db.GetMessage(ctx, lc.ConversationID, s.ClientMsgID)
-			if err != nil {
-				return nil, err
-			}
+			oldMessage, _ := c.db.GetMessage(ctx, lc.ConversationID, s.ClientMsgID)
 			if oldMessage.Status == constant.MsgStatusSendSuccess {
 				sendMsgResp.SendTime = oldMessage.SendTime
 				sendMsgResp.ClientMsgID = oldMessage.ClientMsgID
@@ -681,30 +676,6 @@ func (c *Conversation) sendMessageToServer(ctx context.Context, s *sdk_struct.Ms
 	}()
 	return s, nil
 
-}
-
-func (c *Conversation) sendMsg(ctx context.Context, s *sdk_struct.MsgStruct, wsMsgData *sdkws.MsgData, sendMsgResp *msg.SendMsgResp) error {
-	if sendMsgResp == nil {
-		sendMsgResp = &msg.SendMsgResp{}
-	}
-	if err := c.LongConnMgr.SendReqWaitResp(ctx, wsMsgData, constant.SendMsg, sendMsgResp); err != nil {
-		return err
-	}
-	if sendMsgResp.Modify == nil {
-		s.SendTime = sendMsgResp.SendTime
-		s.Status = constant.MsgStatusSendSuccess
-		s.ServerMsgID = sendMsgResp.ServerMsgID
-	} else {
-		log.ZDebug(ctx, "the sent message was modified by the server", "before", wsMsgData, "after", sendMsgResp.Modify)
-		chatLog := MsgDataToLocalChatLog(sendMsgResp.Modify)
-		*s = *LocalChatLogToMsgStruct(chatLog)
-		s.Status = constant.MsgStatusSendSuccess
-		conversationID := utils.GetConversationIDByMsg(s)
-		if err := c.db.UpdateMessage(ctx, conversationID, chatLog); err != nil {
-			log.ZError(ctx, "update modify message", err, "conversationID", conversationID, "chatLog", chatLog)
-		}
-	}
-	return nil
 }
 
 func (c *Conversation) FindMessageList(ctx context.Context, req []*sdk_params_callback.ConversationArgs) (*sdk_params_callback.FindMessageListCallback, error) {
@@ -873,7 +844,7 @@ func (c *Conversation) InsertSingleMessageToLocalStorage(ctx context.Context, s 
 	if err != nil {
 		return nil, err
 	}
-	_ = common.DispatchUpdateConversation(ctx, common.UpdateConNode{ConID: conversation.ConversationID, Action: constant.AddConOrUpLatMsg, Args: conversation}, c.ConversationEventQueue())
+	_ = common.TriggerCmdUpdateConversation(ctx, common.UpdateConNode{ConID: conversation.ConversationID, Action: constant.AddConOrUpLatMsg, Args: conversation}, c.GetCh())
 	return s, nil
 
 }
@@ -914,7 +885,7 @@ func (c *Conversation) InsertGroupMessageToLocalStorage(ctx context.Context, s *
 	if err != nil {
 		return nil, err
 	}
-	_ = common.DispatchUpdateConversation(ctx, common.UpdateConNode{ConID: conversation.ConversationID, Action: constant.AddConOrUpLatMsg, Args: conversation}, c.ConversationEventQueue())
+	_ = common.TriggerCmdUpdateConversation(ctx, common.UpdateConNode{ConID: conversation.ConversationID, Action: constant.AddConOrUpLatMsg, Args: conversation}, c.GetCh())
 	return s, nil
 
 }
@@ -963,7 +934,7 @@ func (c *Conversation) initBasicInfo(ctx context.Context, message *sdk_struct.Ms
 	message.ClientMsgID = ClientMsgID
 	message.MsgFrom = msgFrom
 	message.ContentType = contentType
-	message.SenderPlatformID = c.platform
+	message.SenderPlatformID = c.platformID
 	return nil
 }
 

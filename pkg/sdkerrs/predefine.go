@@ -26,8 +26,8 @@ var (
 
 	ErrGroupIDNotFound = errs.NewCodeError(GroupIDNotFoundError, "Group ID not found")
 	ErrUserIDNotFound  = errs.NewCodeError(UserIDNotFoundError, "User ID not found")
-	ErrSDKNotInit      = errs.NewCodeError(SDKNotInitError, "SDK not initialized. Please initialize first.")
-	ErrSDKNotLogin     = errs.NewCodeError(SDKNotLoginError, "SDK login incomplete. Please wait until login is complete before proceeding.")
+
+	ErrResourceLoad = errs.NewCodeError(ResourceLoadNotCompleteError, "Resource initialization incomplete")
 
 	// Message-related errors
 	ErrFileNotFound             = errs.NewCodeError(FileNotFoundError, "File not found")
