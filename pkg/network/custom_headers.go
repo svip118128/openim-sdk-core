@@ -2,7 +2,6 @@ package network
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 )
 
@@ -27,29 +26,20 @@ func ApplyCustomHeaders(header http.Header, headersJSON string) error {
 	if headersJSON == "" {
 		return nil
 	}
-	var custom map[string]interface{}
+	var custom map[string]string
 	if err := json.Unmarshal([]byte(headersJSON), &custom); err != nil {
 		return err
 	}
 
 	for key, value := range custom {
-		strValue := ""
-		switch v := value.(type) {
-		case string:
-			strValue = v
-		case float64:
-			strValue = fmt.Sprintf("%v", v)
-		default:
-			continue
-		}
-		if strValue == "" {
+		if value == "" {
 			continue
 		}
 		canonicalKey := http.CanonicalHeaderKey(key)
 		if _, ok := allowCustomHeaders[canonicalKey]; !ok {
 			continue
 		}
-		header.Set(canonicalKey, strValue)
+		header.Set(canonicalKey, value)
 	}
 	return nil
 }
