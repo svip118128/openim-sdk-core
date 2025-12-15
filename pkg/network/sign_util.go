@@ -83,7 +83,6 @@ func GenerateSign(cfg SignConfig) SignParams {
 		cfg.Version,
 		cfg.Brand,
 		cfg.BuildNumber,
-		cfg.Token,
 	}
 
 	payload := strings.Join(payloadParts, "\n")
@@ -161,4 +160,3 @@ func getStringValue(m map[string]interface{}, key string) string {
 	}
 	return ""
 }
-
