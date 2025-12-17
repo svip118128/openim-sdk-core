@@ -247,9 +247,9 @@ func (c *Conversation) doMsgNew(c2v common.Cmd2Value) {
 			copier.Copy(msg, v)
 			msg.Content = string(v.Content)
 
-			var attachedInfo sdk_struct.AttachedInfoElem
-			_ = utils.JsonStringToStruct(v.AttachedInfo, &attachedInfo)
-			msg.AttachedInfoElem = &attachedInfo
+			// var attachedInfo sdk_struct.AttachedInfoElem
+			// _ = utils.JsonStringToStruct(v.AttachedInfo, &attachedInfo)
+			// msg.AttachedInfoElem = &attachedInfo
 
 			//When the message has been marked and deleted by the cloud, it is directly inserted locally without any conversation and message update.
 			if msg.Status == constant.MsgStatusHasDeleted {
@@ -270,7 +270,7 @@ func (c *Conversation) doMsgNew(c2v common.Cmd2Value) {
 			}
 
 			if !isNotPrivate {
-				msg.AttachedInfoElem.IsPrivateChat = true
+				//msg.AttachedInfoElem.IsPrivateChat = true
 			}
 			if conversationID == "" {
 				log.ZError(ctx, "conversationID is empty", errors.New("conversationID is empty"), "msg", msg)

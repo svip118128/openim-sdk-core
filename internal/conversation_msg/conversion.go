@@ -115,6 +115,7 @@ func LocalChatLogToMsgStruct(localMessage *model_struct.LocalChatLog) *sdk_struc
 		Seq:              localMessage.Seq,
 		IsRead:           localMessage.IsRead,
 		Status:           localMessage.Status,
+		AttachedInfo:     localMessage.AttachedInfo,
 		Ex:               localMessage.Ex,
 		LocalEx:          localMessage.LocalEx,
 	}
@@ -138,6 +139,11 @@ func LocalChatLogToMsgStruct(localMessage *model_struct.LocalChatLog) *sdk_struc
 }
 
 func msgHandleByContentType(msg *sdk_struct.MsgStruct) (err error) {
+	if msg.Content == "" {
+		msg.Content = ""
+		return nil
+	}
+
 	switch msg.ContentType {
 	case constant.Text:
 		t := sdk_struct.TextElem{}
@@ -178,6 +184,11 @@ func msgHandleByContentType(msg *sdk_struct.MsgStruct) (err error) {
 	case constant.CustomMsgOnlineOnly:
 		t := sdk_struct.CustomElem{}
 		err = utils.JsonStringToStruct(msg.Content, &t)
+		if err != nil {
+			msg.CustomElem = &t // Set empty CustomElem
+			msg.Content = ""
+			return nil // Don't return error for custom messages
+		}
 		msg.CustomElem = &t
 	case constant.Typing:
 		t := sdk_struct.TypingElem{}
@@ -263,6 +274,6 @@ func MsgStructToLocalChatLog(message *sdk_struct.MsgStruct) *model_struct.LocalC
 	if message.SessionType == constant.WriteGroupChatType || message.SessionType == constant.ReadGroupChatType {
 		localMessage.RecvID = message.GroupID
 	}
-	localMessage.AttachedInfo = utils.StructToJsonString(message.AttachedInfoElem)
+	//localMessage.AttachedInfo = utils.StructToJsonString(message.AttachedInfoElem)
 	return localMessage
 }

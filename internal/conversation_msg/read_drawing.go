@@ -256,10 +256,10 @@ func (c *Conversation) doReadDrawing(ctx context.Context, msg *sdkws.MsgData) er
 			}
 			var successMsgIDs []string
 			for _, message := range messages {
-				attachInfo := sdk_struct.AttachedInfoElem{}
-				_ = utils.JsonStringToStruct(message.AttachedInfo, &attachInfo)
-				attachInfo.HasReadTime = msg.SendTime
-				message.AttachedInfo = utils.StructToJsonString(attachInfo)
+				// attachInfo := sdk_struct.AttachedInfoElem{}
+				// _ = utils.JsonStringToStruct(message.AttachedInfo, &attachInfo)
+				// attachInfo.HasReadTime = msg.SendTime
+				// message.AttachedInfo = utils.StructToJsonString(attachInfo)
 				message.IsRead = true
 				if err = c.db.UpdateMessage(ctx, tips.ConversationID, message); err != nil {
 					log.ZWarn(ctx, "UpdateMessage err", err, "conversationID", tips.ConversationID, "message", message)
