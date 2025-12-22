@@ -70,11 +70,11 @@ func GenerateSign(cfg SignConfig) SignParams {
 	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
 
 	payloadParts := []string{
-		cfg.Method,
-		cfg.Path,
-		timestamp,
-		nonce,
-		cfg.Body,
+		cfg.Method, // 1
+		cfg.Path,   // 2
+		cfg.Body,   // 3  <-- body moved here
+		timestamp,  // 4
+		nonce,      // 5
 		strconv.Itoa(int(cfg.Platform)),
 		operationID,
 		cfg.DeviceID,
