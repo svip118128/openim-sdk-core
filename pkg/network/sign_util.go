@@ -64,30 +64,57 @@ type SignConfig struct {
 	Token       string
 }
 
+func getPayloadOrder(channel string) []string {
+	switch channel {
+	case "FX_iOS_2512", "JC_AP_iOS_2512":
+		return []string{"method", "path", "timestamp", "nonce", "body", "platform", "operationId", "deviceId", "channel", "packageName", "version", "brand", "buildNumber"}
+	case "FX_APK_2512", "JC_GP_APK_2512":
+		return []string{"path", "method", "body", "nonce", "timestamp", "platform", "deviceId", "operationId", "channel", "packageName", "version", "buildNumber", "brand"}
+	case "FX_PC_2512", "JC_PC_2512":
+		return []string{"method", "body", "path", "timestamp", "nonce", "platform", "operationId", "channel", "deviceId", "packageName", "version", "brand", "buildNumber"}
+	case "FX_MAC_2512", "JC_MAC_2512":
+		return []string{"path", "method", "timestamp", "body", "nonce", "platform", "operationId", "deviceId", "packageName", "channel", "version", "buildNumber", "brand"}
+	case "FX_WEB_2512", "JC_WEB_2512":
+		return []string{"method", "path", "nonce", "timestamp", "body", "platform", "operationId", "deviceId", "channel", "version", "packageName", "brand", "buildNumber"}
+	case "FX_H5_2512", "JC_H5_2512":
+		return []string{"body", "method", "path", "timestamp", "nonce", "platform", "operationId", "deviceId", "channel", "packageName", "brand", "version", "buildNumber"}
+	default:
+		return []string{"method", "path", "body", "timestamp", "nonce", "platform", "operationId", "deviceId", "channel", "packageName", "version", "brand", "buildNumber"}
+	}
+}
+
 func GenerateSign(cfg SignConfig) SignParams {
 	nonce := RandomString(16)
 	operationID := GenerateUuidV4()
 	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
 
-	payloadParts := []string{
-		cfg.Method, // 1
-		cfg.Path,   // 2
-		cfg.Body,   // 3  <-- body moved here
-		timestamp,  // 4
-		nonce,      // 5
-		strconv.Itoa(int(cfg.Platform)),
-		operationID,
-		cfg.DeviceID,
-		cfg.Channel,
-		cfg.PackageName,
-		cfg.Version,
-		cfg.Brand,
-		cfg.BuildNumber,
+	order := getPayloadOrder(cfg.Channel)
+	payloadParts := make([]string, len(order))
+
+	valueMap := map[string]string{
+		"method":      cfg.Method,
+		"path":        cfg.Path,
+		"body":        cfg.Body,
+		"timestamp":   timestamp,
+		"nonce":       nonce,
+		"platform":    strconv.Itoa(int(cfg.Platform)),
+		"operationId": operationID,
+		"deviceId":    cfg.DeviceID,
+		"channel":     cfg.Channel,
+		"packageName": cfg.PackageName,
+		"version":     cfg.Version,
+		"brand":       cfg.Brand,
+		"buildNumber": cfg.BuildNumber,
+	}
+
+	for i, key := range order {
+		payloadParts[i] = valueMap[key]
 	}
 
 	payload := strings.Join(payloadParts, "\n")
 
-	h := hmac.New(sha256.New, []byte(cfg.Secret))
+	secretWithTimestamp := fmt.Sprintf("%s:%s", cfg.Secret, timestamp)
+	h := hmac.New(sha256.New, []byte(secretWithTimestamp))
 	h.Write([]byte(payload))
 	signature := hex.EncodeToString(h.Sum(nil))
 

@@ -142,3 +142,10 @@ Please leave your use cases in the comments [here](https://github.com/openimsdk/
 <a href="https://github.com/openimsdk/openim-sdk-core/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=OpenIMSDK/openim-sdk-core" />
 </a>
+
+
+test signatura
+go test -v ./pkg/network/sign_util_test.go ./pkg/network/sign_util.go
+
+
+version: 1.0.1

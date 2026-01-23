@@ -131,7 +131,7 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 			BuildNumber: customHeaders.BuildNumber,
 			Token:       token,
 		})
-
+		request.Header.Set("Accept-Language", "en-US")
 		request.Header.Set("X-Platform", fmt.Sprintf("%d", platform))
 		request.Header.Set("X-Device-Id", customHeaders.DeviceID)
 		request.Header.Set("X-Channel", customHeaders.Channel)
