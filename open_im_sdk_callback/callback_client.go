@@ -153,3 +153,13 @@ type UploadFileCallback interface {
 type UploadLogProgress interface {
 	OnProgress(current int64, size int64)
 }
+
+// OnSecretProvider is an optional callback interface for providing dynamic secrets.
+// When the secret may expire, the app should implement this interface and return
+// the current valid secret. The SDK will call FetchSecret before each API request
+// that requires signing.
+type OnSecretProvider interface {
+	// FetchSecret is called when the SDK needs the current secret for signing.
+	// Returns the secret string. If empty, signature will be skipped.
+	FetchSecret() string
+}

@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
+	callback "github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
 	"github.com/openimsdk/openim-sdk-core/v3/sdk_struct"
 
 	"github.com/openimsdk/tools/mcontext"
@@ -32,7 +32,8 @@ const (
 type GlobalConfig struct {
 	UserID               string
 	Token                string
-	Secret               string
+	Secret               string                        // Static secret (kept for backward compatibility)
+	SecretProvider       callback.OnSecretProvider     // Dynamic secret provider (takes priority over static Secret)
 	CustomHTTPHeaderJSON string
 
 	sdk_struct.IMConfig
@@ -70,8 +71,8 @@ func WithInfo(ctx context.Context, conf *GlobalConfig) context.Context {
 func WithOperationID(ctx context.Context, operationID string) context.Context {
 	return mcontext.SetOperationID(ctx, operationID)
 }
-func WithSendMessageCallback(ctx context.Context, callback open_im_sdk_callback.SendMsgCallBack) context.Context {
-	return context.WithValue(ctx, Callback, callback)
+func WithSendMessageCallback(ctx context.Context, cb callback.SendMsgCallBack) context.Context {
+	return context.WithValue(ctx, Callback, cb)
 }
 
 func WithApiErrCode(ctx context.Context, cb ApiErrCodeCallback) context.Context {
@@ -102,6 +103,13 @@ func (i *info) Token() string {
 }
 
 func (i *info) Secret() string {
+	// First, try to get secret from provider (dynamic)
+	if i.conf.SecretProvider != nil {
+		if secret := i.conf.SecretProvider.FetchSecret(); secret != "" {
+			return secret
+		}
+	}
+	// Fallback to static secret
 	i.conf.secretMu.RLock()
 	defer i.conf.secretMu.RUnlock()
 	return i.conf.Secret

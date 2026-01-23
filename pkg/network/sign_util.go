@@ -112,8 +112,9 @@ func GenerateSign(cfg SignConfig) SignParams {
 	}
 
 	payload := strings.Join(payloadParts, "\n")
+	secretWithTimestamp := fmt.Sprintf("%s:%s", cfg.Secret, timestamp)
+	h := hmac.New(sha256.New, []byte(secretWithTimestamp))
 
-	h := hmac.New(sha256.New, []byte(cfg.Secret))
 	h.Write([]byte(payload))
 	signature := hex.EncodeToString(h.Sum(nil))
 

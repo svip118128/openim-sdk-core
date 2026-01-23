@@ -47,6 +47,9 @@ type ApiResponse struct {
 	Data    json.RawMessage `json:"data"`
 }
 
+// ErrCodeSignatureExpired is the error code returned by backend when signature has expired
+const ErrCodeSignatureExpired = 9009
+
 // ApiPost performs an HTTP POST request to a specified API endpoint.
 // It serializes the request object, sends it to the API, and unmarshals the response into the resp object.
 // It handles logging, error wrapping, and operation ID validation.
@@ -195,6 +198,17 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 
 	// Check if the API returned an error code and handle it.
 	if baseApi.ErrCode != 0 {
+		// Handle signature expired error - retry with fresh secret
+		if baseApi.ErrCode == ErrCodeSignatureExpired {
+			log.ZWarn(ctx, "Signature expired, attempting to refresh and retry", nil, "api", api)
+			// Try to get fresh secret from provider and retry once
+			retryErr := apiPostWithRetry(ctx, api, reqBody, resp, true)
+			if retryErr != nil {
+				log.ZError(ctx, "Retry after signature refresh failed", retryErr, "api", api)
+				return retryErr
+			}
+			return nil
+		}
 		err := sdkerrs.New(baseApi.ErrCode, baseApi.ErrMsg, baseApi.ErrDlt)
 		ccontext.GetApiErrCodeCallback(ctx).OnError(ctx, err)
 		log.ZError(ctx, "ApiResponse", err, "type", "api code error", "msg", baseApi.ErrMsg, "dlt", baseApi.ErrDlt)
@@ -209,6 +223,135 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 	// Unmarshal the actual data part of the response into the provided response object.
 	if err := json.Unmarshal(baseApi.Data, resp); err != nil {
 		log.ZError(ctx, "ApiResponse", err, "type", "api data parse", "data", string(baseApi.Data), "bind", fmt.Sprintf("%T", resp))
+		return sdkerrs.ErrSdkInternal.WrapMsg(fmt.Sprintf("json.Unmarshal(%q, %T) failed %s", string(baseApi.Data), resp, err.Error()))
+	}
+
+	return nil
+}
+
+// apiPostWithRetry is an internal function that performs the actual API request.
+// When isRetry is true, it will force fetch a fresh secret from provider.
+func apiPostWithRetry(ctx context.Context, api string, reqBody []byte, resp any, isRetry bool) error {
+	ctxInfo := ccontext.Info(ctx)
+	reqUrl := ctxInfo.ApiAddr() + api
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl, bytes.NewReader(reqBody))
+	if err != nil {
+		return sdkerrs.ErrSdkInternal.WrapMsg("sdk http.NewRequestWithContext failed " + err.Error())
+	}
+
+	request.ContentLength = int64(len(reqBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept-Encoding", "gzip")
+
+	headersJSON := ctxInfo.CustomHeadersJSON()
+	customHeaders, err := ParseCustomHeaders(headersJSON)
+	if err != nil {
+		log.ZWarn(ctx, "parse custom headers failed", err, "headersJSON", headersJSON)
+		customHeaders = &CustomHeaderValues{}
+	}
+
+	token := ctxInfo.Token()
+	if token == "" {
+		token = "xxx"
+	}
+
+	// For retry, we need to get a fresh secret from the provider
+	secret := ctxInfo.Secret()
+	if isRetry {
+		log.ZDebug(ctx, "Retry: fetching fresh secret from provider")
+	}
+
+	if secret != "" {
+		path := ExtractPathFromURL(reqUrl)
+		platform := customHeaders.Platform
+		if platform == 0 {
+			platform = ctxInfo.PlatformID()
+		}
+
+		signParams := GenerateSign(SignConfig{
+			Method:      http.MethodPost,
+			Path:        path,
+			Body:        string(reqBody),
+			Secret:      secret,
+			Platform:    platform,
+			DeviceID:    customHeaders.DeviceID,
+			Channel:     customHeaders.Channel,
+			PackageName: customHeaders.PackageName,
+			Version:     customHeaders.Version,
+			Brand:       customHeaders.Brand,
+			BuildNumber: customHeaders.BuildNumber,
+			Token:       token,
+		})
+
+		request.Header.Set("X-Platform", fmt.Sprintf("%d", platform))
+		request.Header.Set("X-Device-Id", customHeaders.DeviceID)
+		request.Header.Set("X-Channel", customHeaders.Channel)
+		request.Header.Set("X-PackageName", customHeaders.PackageName)
+		request.Header.Set("X-Version", customHeaders.Version)
+		request.Header.Set("X-Brand", customHeaders.Brand)
+		request.Header.Set("X-BuildNumber", customHeaders.BuildNumber)
+		request.Header.Set("X-Token", token)
+		request.Header.Set("X-Nonce", signParams.Nonce)
+		request.Header.Set("X-OperationId", signParams.OperationID)
+		request.Header.Set("X-Timestamp", signParams.Timestamp)
+		request.Header.Set("X-Signature", signParams.Signature)
+	} else {
+		request.Header.Set("X-Token", token)
+		operationID, _ := ctx.Value("operationID").(string)
+		request.Header.Set("operationID", operationID)
+		request.Header.Set("token", ctxInfo.Token())
+		if headersJSON != "" {
+			if err := ApplyCustomHeaders(request.Header, headersJSON); err != nil {
+				log.ZWarn(ctx, "apply custom headers failed", err, "headersJSON", headersJSON)
+			}
+		}
+	}
+
+	response, err := apiClient.Do(request)
+	if err != nil {
+		return sdkerrs.ErrNetwork.WrapMsg("ApiPost http.Client.Do failed " + err.Error())
+	}
+	defer response.Body.Close()
+
+	var body io.ReadCloser
+	switch contentEncoding := response.Header.Get("Content-Encoding"); contentEncoding {
+	case "":
+		body = response.Body
+	case "gzip":
+		body, err = gzip.NewReader(response.Body)
+		if err != nil {
+			return sdkerrs.ErrSdkInternal.WrapMsg("gzip.NewReader failed " + err.Error())
+		}
+		defer body.Close()
+	default:
+		log.ZWarn(ctx, "http response content encoding not supported", nil, "url", reqUrl, "contentEncoding", contentEncoding)
+		body = response.Body
+	}
+
+	respBody, err := io.ReadAll(body)
+	if err != nil {
+		return sdkerrs.ErrSdkInternal.WrapMsg("io.ReadAll(ApiResponse) failed " + err.Error())
+	}
+
+	log.ZDebug(ctx, "ApiResponse (retry)", "url", reqUrl, "status", response.Status, "body", string(respBody))
+
+	var baseApi ApiResponse
+	if err := json.Unmarshal(respBody, &baseApi); err != nil {
+		return sdkerrs.ErrSdkInternal.WrapMsg(fmt.Sprintf("api %s json.Unmarshal failed %s", api, err.Error()))
+	}
+
+	if baseApi.ErrCode != 0 {
+		err := sdkerrs.New(baseApi.ErrCode, baseApi.ErrMsg, baseApi.ErrDlt)
+		ccontext.GetApiErrCodeCallback(ctx).OnError(ctx, err)
+		return err
+	}
+
+	if resp == nil || len(baseApi.Data) == 0 || string(baseApi.Data) == "null" {
+		return nil
+	}
+
+	if err := json.Unmarshal(baseApi.Data, resp); err != nil {
 		return sdkerrs.ErrSdkInternal.WrapMsg(fmt.Sprintf("json.Unmarshal(%q, %T) failed %s", string(baseApi.Data), resp, err.Error()))
 	}
 

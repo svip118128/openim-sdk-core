@@ -487,3 +487,36 @@ func (s SignalingCallback) OnHangUp(hangUpCallback string) {
 func NewSignalingCallback(callback *js.Value) *SignalingCallback {
 	return &SignalingCallback{CallbackWriter: NewEventData(callback)}
 }
+
+// JSSecretProvider wraps a JS function to implement OnSecretProvider interface.
+// The JS function should be a synchronous function that returns a string.
+// Example JS: setSecretProvider("operationId", { fetchSecret: () => "my-secret" })
+type JSSecretProvider struct {
+	jsFunc js.Value
+}
+
+// NewJSSecretProvider creates a new JSSecretProvider from a JS object with fetchSecret method
+func NewJSSecretProvider(jsObj js.Value) *JSSecretProvider {
+	return &JSSecretProvider{jsFunc: jsObj}
+}
+
+// FetchSecret calls the JS fetchSecret function and returns the secret
+func (p *JSSecretProvider) FetchSecret() string {
+	if p.jsFunc.IsUndefined() || p.jsFunc.IsNull() {
+		return ""
+	}
+
+	// Try to call fetchSecret method on the JS object
+	fetchSecretFunc := p.jsFunc.Get("fetchSecret")
+	if fetchSecretFunc.IsUndefined() || fetchSecretFunc.IsNull() {
+		return ""
+	}
+
+	// Call the JS function synchronously
+	result := fetchSecretFunc.Invoke()
+	if result.IsUndefined() || result.IsNull() {
+		return ""
+	}
+
+	return result.String()
+}
