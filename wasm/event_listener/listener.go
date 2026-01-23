@@ -512,10 +512,37 @@ func (p *JSSecretProvider) FetchSecret() string {
 		return ""
 	}
 
-	// Call the JS function synchronously
+	// Call the JS function
 	result := fetchSecretFunc.Invoke()
 	if result.IsUndefined() || result.IsNull() {
 		return ""
+	}
+
+	// Check if result is a Promise (has .then function)
+	if result.Type() == js.TypeObject && !result.Get("then").IsUndefined() {
+		done := make(chan string, 1)
+
+		then := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+			if len(args) > 0 {
+				done <- args[0].String()
+			} else {
+				done <- ""
+			}
+			return nil
+		})
+		defer then.Release()
+
+		catch := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+			// In case of error, return empty string or handle logging
+			done <- ""
+			return nil
+		})
+		defer catch.Release()
+
+		result.Call("then", then).Call("catch", catch)
+
+		// Wait for promise to resolve
+		return <-done
 	}
 
 	return result.String()
