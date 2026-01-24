@@ -23,7 +23,6 @@ type SecretConfig struct {
 	CSRFToken       string `json:"csrfToken"`
 	Namespace       string `json:"namespace"`
 	SecretName      string `json:"secretName"`
-	RefreshInterval int    `json:"refreshInterval"` // legacy: used if expireAt not provided
 
 	// Device info for signature
 	Platform    int    `json:"platform"`
@@ -76,10 +75,8 @@ func (m *SecretManager) Start() error {
 		return fmt.Errorf("failed to fetch initial secret: %w", err)
 	}
 
-	// Start auto-refresh if interval is set
-	if m.config.RefreshInterval > 0 {
-		go m.refreshLoop()
-	}
+	// Always start refresh loop for auto-renewal based on expiry
+	go m.refreshLoop()
 
 	return nil
 }
@@ -129,53 +126,66 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 	}
 
 	// Calculate next refresh time
-	// Refresh a bit before expiration (e.g., at 90% of lifetime or 5 mins before)
+	// Refresh exactly at expiration or slightly after? 
+	// So we schedule refresh at expireAtTime.
 	now := time.Now()
 	if !expireAt.IsZero() && expireAt.After(now) {
-		lifetime := expireAt.Sub(now)
-		// Refresh at 80% of lifetime or 5 mins before, whichever is later/safer
-		refreshIn := time.Duration(float64(lifetime) * 0.8)
-		return now.Add(refreshIn), nil
+		// Calculate precise duration until expiry
+		refreshIn := expireAt.Sub(now)
+		fmt.Printf("[SecretManager] Scheduled refresh in %v (at %v)\n", refreshIn, expireAt)
+		m.mu.Lock()
+		m.nextRefresh = expireAt
+		m.mu.Unlock()
+		return expireAt, nil
 	}
 
-	// Fallback to fixed interval if no valid expiry
-	interval := m.config.RefreshInterval
-	if interval <= 0 {
-		interval = 300 // Default 5 mins
-	}
-	return now.Add(time.Duration(interval) * time.Second), nil
+	return time.Time{}, fmt.Errorf("no expiry time provided")
 }
 
 func (m *SecretManager) refreshLoop() {
 	// Initial fetch was done in Start
-	// Calculate delay for next fetch
-	// For simplicity in this loop logic, we just use the interval or result from RefreshNow if we tracked it better.
-	// But since Start calls RefreshNow, we can just wait for the interval/expiry from there.
-	// However, RefreshNow returns next time. Start ignores it currently.
-	// Let's just use default interval logic here for simplicity or rely on next update.
 	
-	// Re-calculating next refresh time based on config as backup, 
-	// ideally we should pass nextRefresh from Start to here.
-	interval := m.config.RefreshInterval
-	if interval <= 0 {
-		interval = 300
-	}
-	
-	timer := time.NewTimer(time.Duration(interval) * time.Second)
-	defer timer.Stop()
-
 	for {
+		m.mu.RLock()
+		next := m.nextRefresh
+		m.mu.RUnlock()
+		
+		if next.IsZero() {
+			fmt.Println("[SecretManager] No expiry time known. Auto-refresh paused until error or manual refresh.")
+			select {
+			case <-m.stopChan:
+				return
+			}
+		}
+		
+		waitDuration := time.Until(next)
+		if waitDuration < 0 {
+			waitDuration = 0 // Should trigger immediately if past
+		}
+		
+		timer := time.NewTimer(waitDuration)
+		
 		select {
 		case <-timer.C:
-			next, err := m.RefreshNow()
+			// Time to refresh
+			newNext, err := m.RefreshNow()
+			timer.Stop()
+			
 			if err != nil {
 				fmt.Printf("[SecretManager] Refresh failed: %v. Retrying in 30s...\n", err)
-				timer.Reset(30 * time.Second)
+				// Retry in 30s on failure?
+				m.mu.Lock()
+				m.nextRefresh = time.Now().Add(30 * time.Second)
+				m.mu.Unlock()
 			} else {
-				timer.Reset(time.Until(next))
-				fmt.Printf("[SecretManager] Secret refreshed. Next refresh at: %v\n", next)
+				m.mu.Lock()
+				m.nextRefresh = newNext
+				m.mu.Unlock()
+				fmt.Printf("[SecretManager] Secret refreshed. Next refresh at: %v\n", newNext)
 			}
+			
 		case <-m.stopChan:
+			timer.Stop()
 			return
 		}
 	}
@@ -367,9 +377,39 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 	var expireAtTime time.Time
 	if result.ExpireAt > 0 {
 		expireAtTime = time.Unix(result.ExpireAt, 0)
+	} else if len(result.ExpireAtMap) > 0 {
+		// Try to find expiry in the map
+		// Priority: "expireAt", "expiresAt", or check for the secret name key
+		if val, ok := result.ExpireAtMap["expireAt"]; ok {
+			expireAtTime = parseExpiry(val)
+		} else if val, ok := result.ExpireAtMap["expiresAt"]; ok {
+			expireAtTime = parseExpiry(val)
+		} else if val, ok := result.ExpireAtMap[m.config.SecretName]; ok {
+			expireAtTime = parseExpiry(val)
+		}
 	}
 
 	return result.Plaintext, expireAtTime, nil
+}
+
+func parseExpiry(val interface{}) time.Time {
+	switch v := val.(type) {
+	case float64:
+		return time.Unix(int64(v), 0)
+	case int64:
+		return time.Unix(v, 0)
+	case string:
+		// Try parsing RFC3339
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+		// Try parsing RFC3339Nano
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			return t
+		}
+		// Try other common formats if needed
+	}
+	return time.Time{}
 }
 
 // DeviceInfo holds device information for signature generation
