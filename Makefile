@@ -188,6 +188,7 @@ reset_remote_branch:
 ios:
 	go get golang.org/x/mobile
 	rm -rf build/ open_im_sdk/t_friend_sdk.go open_im_sdk/t_group_sdk.go  open_im_sdk/ws_wrapper/
+	export PATH=$$PATH:$$(go env GOPATH)/bin && \
 	GOARCH=arm64 gomobile bind -v -trimpath -ldflags "-s -w" -o build/OpenIMCore.xcframework -target=ios ./open_im_sdk/ ./open_im_sdk_callback/
 
 ## ios-all: Build iOS XCFramework with full workflow
@@ -239,6 +240,7 @@ mobile-all: android-all ios-all
 .PHONY: android
 android:
 	go get golang.org/x/mobile/bind
+	export PATH=$$PATH:$$(go env GOPATH)/bin && \
 	GOARCH=amd64 gomobile bind -v -trimpath -ldflags="-s -w" -o ./open_im_sdk.aar -target=android ./open_im_sdk/ ./open_im_sdk_callback/
 
 ## android-all: Build Android AAR for all architectures

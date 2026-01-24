@@ -22,6 +22,7 @@ import (
 
 	"github.com/openimsdk/openim-sdk-core/v3/open_im_sdk_callback"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/secret_manager"
 	pbConstant "github.com/openimsdk/protocol/constant"
 
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/constant"
@@ -106,6 +107,34 @@ func SetSecretProvider(operationID string, provider open_im_sdk_callback.OnSecre
 		return
 	}
 	UserForSDK.SetSecretProvider(provider)
+}
+
+// SetSecretConfig configures the SDK to automatically fetch secrets from Config Center
+func SetSecretConfig(operationID string, configJSON string) {
+	if UserForSDK == nil {
+		fmt.Println(operationID, "SetSecretConfig: UserForSDK is nil")
+		return
+	}
+
+	var config secret_manager.SecretConfig
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		fmt.Println(operationID, "SetSecretConfig: Failed to parse config:", err)
+		return
+	}
+
+	manager := secret_manager.NewSecretManager(&config)
+	manager.OnSecretChanged = func(secret string) {
+		// Update the secret when it changes
+		UserForSDK.SetSecret(secret)
+	}
+
+	if err := manager.Start(); err != nil {
+		fmt.Println(operationID, "SetSecretConfig: Failed to start secret manager:", err)
+		return
+	}
+
+	// Store manager reference to prevent garbage collection
+	UserForSDK.SetSecretManager(manager)
 }
 
 func Login(callback open_im_sdk_callback.Base, operationID string, userID, token string) {

@@ -42,6 +42,7 @@ import (
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/db/db_interface"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/db/model_struct"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/sdkerrs"
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/secret_manager"
 	"github.com/openimsdk/openim-sdk-core/v3/sdk_struct"
 	"github.com/openimsdk/protocol/push"
 	"github.com/openimsdk/protocol/sdkws"
@@ -127,6 +128,8 @@ type LoginMgr struct {
 	cancel    context.CancelFunc
 	info      *ccontext.GlobalConfig
 	id2MinSeq map[string]int64
+
+	secretMgr *secret_manager.SecretManager
 }
 
 func (u *LoginMgr) GroupListener() open_im_sdk_callback.OnGroupListener {
@@ -259,6 +262,13 @@ func (u *LoginMgr) SetSecretProvider(provider open_im_sdk_callback.OnSecretProvi
 		return
 	}
 	u.info.SecretProvider = provider
+}
+
+func (u *LoginMgr) SetSecretManager(manager *secret_manager.SecretManager) {
+	if u.secretMgr != nil {
+		u.secretMgr.Stop()
+	}
+	u.secretMgr = manager
 }
 
 func (u *LoginMgr) GetLoginUserID() string {
