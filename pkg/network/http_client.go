@@ -156,8 +156,6 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 		}
 	}
 
-	log.ZDebug(ctx, "ApiRequest headers", "headers", request.Header)
-
 	response, err := apiClient.Do(request)
 	if err != nil {
 		log.ZError(ctx, "ApiRequest", err, "type", "network error")
