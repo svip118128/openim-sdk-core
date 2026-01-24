@@ -102,12 +102,7 @@ func SetSecret(operationID string, secret string) {
 	UserForSDK.SetSecret(secret)
 }
 
-func SetSecretProvider(operationID string, provider open_im_sdk_callback.OnSecretProvider) {
-	if UserForSDK == nil {
-		return
-	}
-	UserForSDK.SetSecretProvider(provider)
-}
+
 
 // SetSecretConfig configures the SDK to automatically fetch secrets from Config Center
 func SetSecretConfig(operationID string, configJSON string) {

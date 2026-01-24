@@ -146,15 +146,7 @@ func (w *WrapperInitLogin) SetCustomHTTPHeader(_ js.Value, args []js.Value) inte
 	return event_listener.NewCaller(open_im_sdk.SetCustomHTTPHeader, nil, &args).AsyncCallWithOutCallback()
 }
 
-func (w *WrapperInitLogin) SetSecretProvider(_ js.Value, args []js.Value) interface{} {
-	if len(args) < 2 {
-		return js.ValueOf(false)
-	}
-	// args[0] is operationID, args[1] is the JS object with fetchSecret method
-	jsSecretProvider := event_listener.NewJSSecretProvider(args[1])
-	open_im_sdk.SetSecretProvider(args[0].String(), jsSecretProvider)
-	return js.ValueOf(true)
-}
+
 
 func (w *WrapperInitLogin) SetSecretConfig(_ js.Value, args []js.Value) interface{} {
 	return event_listener.NewCaller(open_im_sdk.SetSecretConfig, nil, &args).AsyncCallWithOutCallback()

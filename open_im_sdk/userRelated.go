@@ -257,12 +257,7 @@ func (u *LoginMgr) SetSecret(secret string) {
 	u.info.SetSecret(secret)
 }
 
-func (u *LoginMgr) SetSecretProvider(provider open_im_sdk_callback.OnSecretProvider) {
-	if u.info == nil {
-		return
-	}
-	u.info.SecretProvider = provider
-}
+
 
 func (u *LoginMgr) SetSecretManager(manager *secret_manager.SecretManager) {
 	if u.secretMgr != nil {
