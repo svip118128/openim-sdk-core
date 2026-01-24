@@ -155,3 +155,7 @@ func (w *WrapperInitLogin) SetSecretProvider(_ js.Value, args []js.Value) interf
 	open_im_sdk.SetSecretProvider(args[0].String(), jsSecretProvider)
 	return js.ValueOf(true)
 }
+
+func (w *WrapperInitLogin) SetSecretConfig(_ js.Value, args []js.Value) interface{} {
+	return event_listener.NewCaller(open_im_sdk.SetSecretConfig, nil, &args).AsyncCallWithOutCallback()
+}

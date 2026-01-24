@@ -67,12 +67,20 @@ func NewSecretManager(config *SecretConfig) *SecretManager {
 	}
 }
 
-// Start begins the secret manager asynchronously.
-// It will try to fetch the secret immediately, but won't block if it fails initially.
-// It will keep retrying in the background.
+// Start begins the secret manager.
 func (m *SecretManager) Start() error {
-	// Start the background loop immediately
-	go m.refreshLoop()
+	fmt.Println("[SecretManager] Starting...")
+	// Fetch initial secret (blocking)
+	if _, err := m.RefreshNow(); err != nil {
+		fmt.Printf("[SecretManager] Start failed: %v\n", err)
+		return fmt.Errorf("failed to fetch initial secret: %w", err)
+	}
+
+	// Start auto-refresh if interval is set
+	if m.config.RefreshInterval > 0 {
+		go m.refreshLoop()
+	}
+
 	return nil
 }
 
@@ -90,11 +98,13 @@ func (m *SecretManager) GetSecret() string {
 
 // RefreshNow fetches a new secret from Config Center
 func (m *SecretManager) RefreshNow() (time.Time, error) {
+	fmt.Println("[SecretManager] RefreshNow called")
 	// Fetch token first
 	token, err := m.fetchToken()
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to fetch token: %w", err)
 	}
+	fmt.Printf("[SecretManager] Token fetched successfully (len=%d)\n", len(token))
 
 	m.mu.Lock()
 	m.currentToken = token
@@ -105,6 +115,7 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to fetch secret: %w", err)
 	}
+	fmt.Printf("[SecretManager] Secret fetched successfully (len=%d)\n", len(secret))
 
 	m.mu.Lock()
 	oldSecret := m.currentSecret
@@ -113,6 +124,7 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 
 	// Notify if secret changed
 	if oldSecret != secret && m.OnSecretChanged != nil {
+		fmt.Println("[SecretManager] Secret changed, notifying listener")
 		m.OnSecretChanged(secret)
 	}
 
@@ -135,14 +147,21 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 }
 
 func (m *SecretManager) refreshLoop() {
-	// Initial fetch
-	nextRefresh, err := m.RefreshNow()
-	if err != nil {
-		fmt.Printf("[SecretManager] Initial fetch failed: %v. Retrying in 10s...\n", err)
-		nextRefresh = time.Now().Add(10 * time.Second)
+	// Initial fetch was done in Start
+	// Calculate delay for next fetch
+	// For simplicity in this loop logic, we just use the interval or result from RefreshNow if we tracked it better.
+	// But since Start calls RefreshNow, we can just wait for the interval/expiry from there.
+	// However, RefreshNow returns next time. Start ignores it currently.
+	// Let's just use default interval logic here for simplicity or rely on next update.
+	
+	// Re-calculating next refresh time based on config as backup, 
+	// ideally we should pass nextRefresh from Start to here.
+	interval := m.config.RefreshInterval
+	if interval <= 0 {
+		interval = 300
 	}
-
-	timer := time.NewTimer(time.Until(nextRefresh))
+	
+	timer := time.NewTimer(time.Duration(interval) * time.Second)
 	defer timer.Stop()
 
 	for {
@@ -151,10 +170,8 @@ func (m *SecretManager) refreshLoop() {
 			next, err := m.RefreshNow()
 			if err != nil {
 				fmt.Printf("[SecretManager] Refresh failed: %v. Retrying in 30s...\n", err)
-				// Retry sooner on failure
 				timer.Reset(30 * time.Second)
 			} else {
-				// Schedule next normal refresh
 				timer.Reset(time.Until(next))
 				fmt.Printf("[SecretManager] Secret refreshed. Next refresh at: %v\n", next)
 			}
@@ -166,6 +183,7 @@ func (m *SecretManager) refreshLoop() {
 
 // fetchToken fetches a new token from Config Center using Ed25519 signature
 func (m *SecretManager) fetchToken() (string, error) {
+	fmt.Println("[SecretManager] Generating Ed25519 keypair for token...")
 	// Generate Ed25519 keypair
 	publicKey, privateKey, err := GenerateEd25519Keypair()
 	if err != nil {
@@ -203,6 +221,7 @@ func (m *SecretManager) fetchToken() (string, error) {
 		return "", fmt.Errorf("failed to sign payload: %w", err)
 	}
 
+	fmt.Printf("[SecretManager] Fetching token from %s\n", url)
 	// Create HTTP request
 	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -234,6 +253,7 @@ func (m *SecretManager) fetchToken() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	fmt.Printf("[SecretManager] Token response status: %d, body: %s\n", resp.StatusCode, string(respBody))
 
 	var result struct {
 		Token   string `json:"token"`
@@ -253,6 +273,7 @@ func (m *SecretManager) fetchToken() (string, error) {
 
 // fetchSecret fetches the secret from Config Center using the current token
 func (m *SecretManager) fetchSecret() (string, time.Time, error) {
+	fmt.Println("[SecretManager] Fetching secret...")
 	m.mu.RLock()
 	token := m.currentToken
 	m.mu.RUnlock()
@@ -298,6 +319,7 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 		return "", time.Time{}, fmt.Errorf("failed to sign payload: %w", err)
 	}
 
+	fmt.Printf("[SecretManager] Fetching secret from %s\n", url)
 	// Create HTTP request
 	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -330,6 +352,7 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, err
 	}
+	fmt.Printf("[SecretManager] Secret response status: %d, body: %s\n", resp.StatusCode, string(respBody))
 
 	var result SecretResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {

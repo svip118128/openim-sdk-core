@@ -52,6 +52,7 @@ func registerFunc() {
 	js.Global().Set("setSecret", js.FuncOf(wrapperInitLogin.SetSecret))
 	js.Global().Set("setCustomHTTPHeader", js.FuncOf(wrapperInitLogin.SetCustomHTTPHeader))
 	js.Global().Set("setSecretProvider", js.FuncOf(wrapperInitLogin.SetSecretProvider))
+	js.Global().Set("setSecretConfig", js.FuncOf(wrapperInitLogin.SetSecretConfig))
 
 	//register conversation and message function
 	wrapperConMsg := wasm_wrapper.NewWrapperConMsg(globalFuc)
