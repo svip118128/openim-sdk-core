@@ -126,7 +126,7 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 	}
 
 	// Calculate next refresh time
-	// Refresh exactly at expiration or slightly after? 
+	// Refresh exactly at expiration or slightly after?
 	// So we schedule refresh at expireAtTime.
 	now := time.Now()
 	if !expireAt.IsZero() && expireAt.After(now) {
@@ -144,12 +144,12 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 
 func (m *SecretManager) refreshLoop() {
 	// Initial fetch was done in Start
-	
+
 	for {
 		m.mu.RLock()
 		next := m.nextRefresh
 		m.mu.RUnlock()
-		
+
 		if next.IsZero() {
 			fmt.Println("[SecretManager] No expiry time known. Auto-refresh paused until error or manual refresh.")
 			select {
@@ -157,20 +157,20 @@ func (m *SecretManager) refreshLoop() {
 				return
 			}
 		}
-		
+
 		waitDuration := time.Until(next)
 		if waitDuration < 0 {
 			waitDuration = 0 // Should trigger immediately if past
 		}
-		
+
 		timer := time.NewTimer(waitDuration)
-		
+
 		select {
 		case <-timer.C:
 			// Time to refresh
 			newNext, err := m.RefreshNow()
 			timer.Stop()
-			
+
 			if err != nil {
 				fmt.Printf("[SecretManager] Refresh failed: %v. Retrying in 30s...\n", err)
 				// Retry in 30s on failure?
@@ -183,7 +183,7 @@ func (m *SecretManager) refreshLoop() {
 				m.mu.Unlock()
 				fmt.Printf("[SecretManager] Secret refreshed. Next refresh at: %v\n", newNext)
 			}
-			
+
 		case <-m.stopChan:
 			timer.Stop()
 			return
@@ -216,7 +216,7 @@ func (m *SecretManager) fetchToken() (string, error) {
 	nonce := randomString(32)
 	operationID := uuid.New().String()
 
-	payload := BuildTokenPayload(method, path, timestamp, nonce, bodyBytes, DeviceInfo{
+	payload := BuildTokenPayload(method, path, timestamp, nonce, operationID, bodyBytes, DeviceInfo{
 		Platform:    m.config.Platform,
 		DeviceID:    m.config.DeviceID,
 		Channel:     m.config.Channel,
@@ -314,7 +314,7 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 	nonce := randomString(32)
 	operationID := uuid.New().String()
 
-	payload := BuildTokenPayload(method, path, timestamp, nonce, bodyBytes, DeviceInfo{
+	payload := BuildTokenPayload(method, path, timestamp, nonce, operationID, bodyBytes, DeviceInfo{
 		Platform:    m.config.Platform,
 		DeviceID:    m.config.DeviceID,
 		Channel:     m.config.Channel,
@@ -443,7 +443,7 @@ func SignPayload(privateKey []byte, payload string) (string, error) {
 }
 
 // BuildTokenPayload builds the payload string for signing
-func BuildTokenPayload(method, path, timestamp, nonce string, body []byte, info DeviceInfo) string {
+func BuildTokenPayload(method, path, timestamp, nonce, operationID string, body []byte, info DeviceInfo) string {
 	parts := []string{
 		strings.ToUpper(method),
 		path,
@@ -451,7 +451,7 @@ func BuildTokenPayload(method, path, timestamp, nonce string, body []byte, info 
 		nonce,
 		string(body),
 		fmt.Sprintf("%d", info.Platform),
-		uuid.New().String(), // operationId - will be regenerated, but structure matters
+		operationID,
 		info.DeviceID,
 		info.Channel,
 		info.PackageName,
