@@ -108,9 +108,6 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 	}
 
 	token := ctxInfo.Token()
-	if token == "" {
-		token = "xxx"
-	}
 
 	secret := ctxInfo.Secret()
 	if secret != "" {
@@ -252,9 +249,6 @@ func apiPostWithRetry(ctx context.Context, api string, reqBody []byte, resp any,
 	}
 
 	token := ctxInfo.Token()
-	if token == "" {
-		token = "xxx"
-	}
 
 	// For retry, we need to get a fresh secret from the provider
 	secret := ctxInfo.Secret()

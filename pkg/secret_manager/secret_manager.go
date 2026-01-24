@@ -201,9 +201,9 @@ func (m *SecretManager) fetchToken() (string, error) {
 	}
 
 	// Build request
-	url := strings.TrimSuffix(m.config.ConfigCenterURL, "/") + "/v1/auth/get_token"
+	url := strings.TrimSuffix(m.config.ConfigCenterURL, "/") + "/v2/auth/get_token"
 	method := "POST"
-	path := "/v1/auth/get_token"
+	path := "/v2/auth/get_token"
 
 	publicKeyHex := hex.EncodeToString(publicKey)
 	body := map[string]interface{}{
@@ -299,7 +299,7 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 	}
 
 	// Build request
-	path := fmt.Sprintf("/v1/namespaces/%s/secrets/%s:get", m.config.Namespace, m.config.SecretName)
+	path := fmt.Sprintf("/v2/namespaces/%s/secrets/%s:get", m.config.Namespace, m.config.SecretName)
 	url := strings.TrimSuffix(m.config.ConfigCenterURL, "/") + path
 	method := "POST"
 
