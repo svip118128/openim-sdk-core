@@ -36,11 +36,12 @@ type SecretConfig struct {
 
 // SecretResponse represents the structure of the secret response from Config Center
 type SecretResponse struct {
-	Plaintext   string                 `json:"plaintext"`
-	ExpireAt    int64                  `json:"expireAt"`    // Unix timestamp
-	ExpireAtMap map[string]interface{} `json:"expireAtMap"` // Alternative location for expiry
-	ErrCode     int                    `json:"errCode"`
-	ErrMsg      string                 `json:"errMsg"`
+	Plaintext        string `json:"plaintext"`
+	ExpireAt         string `json:"expire_at"`          // ISO8601 string
+	ExpiresInSeconds int64  `json:"expires_in_seconds"` // Seconds
+	KeyID            string `json:"key_id"`
+	Status           string `json:"status"`
+	Version          int    `json:"version"`
 }
 
 // SecretManager manages fetching and refreshing secrets from Config Center
@@ -266,16 +267,20 @@ func (m *SecretManager) fetchToken() (string, error) {
 	fmt.Printf("[SecretManager] Token response status: %d, body: %s\n", resp.StatusCode, string(respBody))
 
 	var result struct {
-		Token   string `json:"token"`
-		ErrCode int    `json:"errCode"`
-		ErrMsg  string `json:"errMsg"`
+		Token      string `json:"token"`
+		ExpireAt   string `json:"expires_at"`
+		TTLSeconds int    `json:"ttl_seconds"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	if result.ErrCode != 0 {
-		return "", fmt.Errorf("config center error: %d - %s", result.ErrCode, result.ErrMsg)
+	// Check for HTTP errors or empty token
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("config center error: status %d", resp.StatusCode)
+	}
+	if result.Token == "" {
+		return "", fmt.Errorf("empty token received")
 	}
 
 	return result.Token, nil
@@ -369,48 +374,30 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 		return "", time.Time{}, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	if result.ErrCode != 0 {
-		return "", time.Time{}, fmt.Errorf("config center error: %d - %s", result.ErrCode, result.ErrMsg)
+	if resp.StatusCode != http.StatusOK {
+		return "", time.Time{}, fmt.Errorf("config center error: status %d", resp.StatusCode)
 	}
 
-	// Try to get expiry time
+	// Parse expiry time
 	var expireAtTime time.Time
-	if result.ExpireAt > 0 {
-		expireAtTime = time.Unix(result.ExpireAt, 0)
-	} else if len(result.ExpireAtMap) > 0 {
-		// Try to find expiry in the map
-		// Priority: "expireAt", "expiresAt", or check for the secret name key
-		if val, ok := result.ExpireAtMap["expireAt"]; ok {
-			expireAtTime = parseExpiry(val)
-		} else if val, ok := result.ExpireAtMap["expiresAt"]; ok {
-			expireAtTime = parseExpiry(val)
-		} else if val, ok := result.ExpireAtMap[m.config.SecretName]; ok {
-			expireAtTime = parseExpiry(val)
+	if result.ExpireAt != "" {
+		if t, err := time.Parse(time.RFC3339, result.ExpireAt); err == nil {
+			expireAtTime = t
+		} else {
+			// Try without Z or with different precision if needed, but RFC3339 is standard
+			fmt.Printf("[SecretManager] Failed to parse expire_at: %v. Using expires_in_seconds.\n", err)
 		}
+	}
+
+	// Fallback to expires_in_seconds if absolute time parsing failed
+	if expireAtTime.IsZero() && result.ExpiresInSeconds > 0 {
+		expireAtTime = time.Now().Add(time.Duration(result.ExpiresInSeconds) * time.Second)
 	}
 
 	return result.Plaintext, expireAtTime, nil
 }
 
-func parseExpiry(val interface{}) time.Time {
-	switch v := val.(type) {
-	case float64:
-		return time.Unix(int64(v), 0)
-	case int64:
-		return time.Unix(v, 0)
-	case string:
-		// Try parsing RFC3339
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			return t
-		}
-		// Try parsing RFC3339Nano
-		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-			return t
-		}
-		// Try other common formats if needed
-	}
-	return time.Time{}
-}
+
 
 // DeviceInfo holds device information for signature generation
 type DeviceInfo struct {
