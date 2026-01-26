@@ -33,7 +33,6 @@ type GlobalConfig struct {
 	UserID               string
 	Token                string
 	Secret               string                        // Static secret (kept for backward compatibility)
-	SecretProvider       callback.OnSecretProvider     // Dynamic secret provider (takes priority over static Secret)
 	CustomHTTPHeaderJSON string
 
 	sdk_struct.IMConfig
@@ -103,13 +102,6 @@ func (i *info) Token() string {
 }
 
 func (i *info) Secret() string {
-	// First, try to get secret from provider (dynamic)
-	if i.conf.SecretProvider != nil {
-		if secret := i.conf.SecretProvider.FetchSecret(); secret != "" {
-			return secret
-		}
-	}
-	// Fallback to static secret
 	i.conf.secretMu.RLock()
 	defer i.conf.secretMu.RUnlock()
 	return i.conf.Secret
