@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/utils"
 )
 
 type SignParams struct {
@@ -86,7 +88,7 @@ func getPayloadOrder(channel string) []string {
 func GenerateSign(cfg SignConfig) SignParams {
 	nonce := RandomString(16)
 	operationID := GenerateUuidV4()
-	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
+	timestamp := utils.GetCorrectedTime().Format(time.RFC3339Nano)
 
 	order := getPayloadOrder(cfg.Channel)
 	payloadParts := make([]string, len(order))

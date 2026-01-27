@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/utils"
 )
 
 // SecretConfig holds the configuration for the secret manager
@@ -212,8 +213,8 @@ func (m *SecretManager) fetchToken() (string, error) {
 	}
 	bodyBytes, _ := json.Marshal(body)
 
-	// Generate signature
-	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
+	// Generate signature using corrected server time
+	timestamp := utils.GetCorrectedTime().Format(time.RFC3339Nano)
 	nonce := randomString(32)
 	operationID := uuid.New().String()
 
@@ -259,6 +260,11 @@ func (m *SecretManager) fetchToken() (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+
+	// Sync time with server using Date header (RFC1123 format: "Tue, 27 Jan 2026 13:23:21 GMT")
+	if dateHeader := resp.Header.Get("Date"); dateHeader != "" {
+		utils.UpdateTimeDiffFromDateHeader(dateHeader)
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -314,8 +320,8 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 	}
 	bodyBytes, _ := json.Marshal(body)
 
-	// Generate signature
-	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
+	// Generate signature using corrected server time
+	timestamp := utils.GetCorrectedTime().Format(time.RFC3339Nano)
 	nonce := randomString(32)
 	operationID := uuid.New().String()
 
@@ -362,6 +368,11 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 		return "", time.Time{}, err
 	}
 	defer resp.Body.Close()
+
+	// Sync time with server using Date header (RFC1123 format: "Tue, 27 Jan 2026 13:23:21 GMT")
+	if dateHeader := resp.Header.Get("Date"); dateHeader != "" {
+		utils.UpdateTimeDiffFromDateHeader(dateHeader)
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -28,6 +28,7 @@ import (
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/ccontext"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/page"
 	"github.com/openimsdk/openim-sdk-core/v3/pkg/sdkerrs"
+	"github.com/openimsdk/openim-sdk-core/v3/pkg/utils"
 	"github.com/openimsdk/tools/errs"
 
 	"github.com/openimsdk/protocol/sdkws"
@@ -192,6 +193,11 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 		return sdkerrs.ErrSdkInternal.WrapMsg(fmt.Sprintf("api %s json.Unmarshal(%q, %T) failed %s", api, string(respBody), &baseApi, err.Error()))
 	}
 
+	// Sync time with server using Date header (RFC1123 format: "Tue, 27 Jan 2026 13:23:21 GMT")
+	if dateHeader := response.Header.Get("Date"); dateHeader != "" {
+		utils.UpdateTimeDiffFromDateHeader(dateHeader)
+	}
+
 	// Check if the API returned an error code and handle it.
 	if baseApi.ErrCode != 0 {
 		// Handle signature expired error or signature invalid - retry with fresh secret
@@ -328,6 +334,11 @@ func apiPostWithRetry(ctx context.Context, api string, reqBody []byte, resp any,
 	}
 
 	log.ZDebug(ctx, "ApiResponse (retry)", "url", reqUrl, "status", response.Status, "body", string(respBody))
+
+	// Sync time with server using Date header (RFC1123 format)
+	if dateHeader := response.Header.Get("Date"); dateHeader != "" {
+		utils.UpdateTimeDiffFromDateHeader(dateHeader)
+	}
 
 	var baseApi ApiResponse
 	if err := json.Unmarshal(respBody, &baseApi); err != nil {
