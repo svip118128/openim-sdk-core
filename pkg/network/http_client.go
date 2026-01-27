@@ -51,6 +51,7 @@ type ApiResponse struct {
 // ErrCodeSignatureExpired is the error code returned by backend when signature has expired
 const ErrCodeSignatureExpired = 9009
 const ErrCodeSignatureInvalid = 1903
+const ErrCodeTimeNotSynced = 9010 // FE/BE time not synced
 
 // ApiPost performs an HTTP POST request to a specified API endpoint.
 // It serializes the request object, sends it to the API, and unmarshals the response into the resp object.
@@ -200,9 +201,9 @@ func ApiPost(ctx context.Context, api string, req, resp any) (err error) {
 
 	// Check if the API returned an error code and handle it.
 	if baseApi.ErrCode != 0 {
-		// Handle signature expired error or signature invalid - retry with fresh secret
-		if baseApi.ErrCode == ErrCodeSignatureExpired || baseApi.ErrCode == ErrCodeSignatureInvalid {
-			log.ZWarn(ctx, "Signature expired, attempting to refresh and retry", nil, "api", api)
+		// Handle signature expired error, signature invalid, or time not synced - retry with fresh signature
+		if baseApi.ErrCode == ErrCodeSignatureExpired || baseApi.ErrCode == ErrCodeSignatureInvalid || baseApi.ErrCode == ErrCodeTimeNotSynced {
+			log.ZWarn(ctx, "Signature error, attempting to refresh and retry", nil, "api", api, "errCode", baseApi.ErrCode)
 			// Try to get fresh secret from provider and retry once
 			retryErr := apiPostWithRetry(ctx, api, reqBody, resp, true)
 			if retryErr != nil {
