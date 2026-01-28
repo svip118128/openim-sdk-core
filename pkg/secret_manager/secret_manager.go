@@ -194,7 +194,23 @@ func (m *SecretManager) refreshLoop() {
 }
 
 // fetchToken fetches a new token from Config Center using Ed25519 signature
+// It will retry once if the first attempt fails due to time sync issues
 func (m *SecretManager) fetchToken() (string, error) {
+	token, err := m.doFetchToken()
+	if err != nil {
+		// First attempt failed, time should now be synced from Date header
+		// Retry once with corrected time
+		fmt.Printf("[SecretManager] First fetchToken attempt failed: %v. Retrying with synced time...\n", err)
+		token, err = m.doFetchToken()
+		if err != nil {
+			return "", fmt.Errorf("fetchToken retry failed: %w", err)
+		}
+	}
+	return token, nil
+}
+
+// doFetchToken performs the actual token fetch request
+func (m *SecretManager) doFetchToken() (string, error) {
 	fmt.Println("[SecretManager] Generating Ed25519 keypair for token...")
 	// Generate Ed25519 keypair
 	publicKey, privateKey, err := GenerateEd25519Keypair()
@@ -293,7 +309,23 @@ func (m *SecretManager) fetchToken() (string, error) {
 }
 
 // fetchSecret fetches the secret from Config Center using the current token
+// It will retry once if the first attempt fails due to time sync issues
 func (m *SecretManager) fetchSecret() (string, time.Time, error) {
+	secret, expireAt, err := m.doFetchSecret()
+	if err != nil {
+		// First attempt failed, time should now be synced from Date header
+		// Retry once with corrected time
+		fmt.Printf("[SecretManager] First fetchSecret attempt failed: %v. Retrying with synced time...\n", err)
+		secret, expireAt, err = m.doFetchSecret()
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("fetchSecret retry failed: %w", err)
+		}
+	}
+	return secret, expireAt, nil
+}
+
+// doFetchSecret performs the actual secret fetch request
+func (m *SecretManager) doFetchSecret() (string, time.Time, error) {
 	fmt.Println("[SecretManager] Fetching secret...")
 	m.mu.RLock()
 	token := m.currentToken
