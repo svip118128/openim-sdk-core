@@ -127,7 +127,6 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 	now := time.Now()
 	if !expireAt.IsZero() && expireAt.After(now) {
 		// Calculate precise duration until expiry
-		refreshIn := expireAt.Sub(now)
 		m.mu.Lock()
 		m.nextRefresh = expireAt
 		m.mu.Unlock()
