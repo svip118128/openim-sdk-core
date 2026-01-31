@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -46,7 +45,6 @@ func UpdateTimeDiffFromDateHeader(dateHeader string) {
 
 	serverTime, err := time.Parse(time.RFC1123, dateHeader)
 	if err != nil {
-		fmt.Printf("[TimeSync] Failed to parse Date header: %v\n", err)
 		return
 	}
 
@@ -64,8 +62,7 @@ func updateTimeDiff(serverTime time.Time) {
 	timeDiffMu.Unlock()
 
 	if oldDiff != newDiff {
-		fmt.Printf("[TimeSync] Time diff updated: %v -> %v (server: %v, local: %v)\n",
-			oldDiff, newDiff, serverTime.Format(time.RFC3339), localTime.Format(time.RFC3339))
+		// fmt.Printf("[TimeSync] Time diff updated: %v -> %v (server: %v, local: %v)\n",
+		// 	oldDiff, newDiff, serverTime.Format(time.RFC3339), localTime.Format(time.RFC3339))
 	}
 }
-

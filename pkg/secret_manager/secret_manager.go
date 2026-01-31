@@ -70,10 +70,8 @@ func NewSecretManager(config *SecretConfig) *SecretManager {
 
 // Start begins the secret manager.
 func (m *SecretManager) Start() error {
-	fmt.Println("[SecretManager] Starting...")
 	// Fetch initial secret (blocking)
 	if _, err := m.RefreshNow(); err != nil {
-		fmt.Printf("[SecretManager] Start failed: %v\n", err)
 		return fmt.Errorf("failed to fetch initial secret: %w", err)
 	}
 
@@ -97,13 +95,11 @@ func (m *SecretManager) GetSecret() string {
 
 // RefreshNow fetches a new secret from Config Center
 func (m *SecretManager) RefreshNow() (time.Time, error) {
-	fmt.Println("[SecretManager] RefreshNow called")
 	// Fetch token first
 	token, err := m.fetchToken()
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to fetch token: %w", err)
 	}
-	fmt.Printf("[SecretManager] Token fetched successfully (len=%d)\n", len(token))
 
 	m.mu.Lock()
 	m.currentToken = token
@@ -114,7 +110,6 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to fetch secret: %w", err)
 	}
-	fmt.Printf("[SecretManager] Secret fetched successfully (len=%d)\n", len(secret))
 
 	m.mu.Lock()
 	oldSecret := m.currentSecret
@@ -123,7 +118,6 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 
 	// Notify if secret changed
 	if oldSecret != secret && m.OnSecretChanged != nil {
-		fmt.Println("[SecretManager] Secret changed, notifying listener")
 		m.OnSecretChanged(secret)
 	}
 
@@ -134,7 +128,6 @@ func (m *SecretManager) RefreshNow() (time.Time, error) {
 	if !expireAt.IsZero() && expireAt.After(now) {
 		// Calculate precise duration until expiry
 		refreshIn := expireAt.Sub(now)
-		fmt.Printf("[SecretManager] Scheduled refresh in %v (at %v)\n", refreshIn, expireAt)
 		m.mu.Lock()
 		m.nextRefresh = expireAt
 		m.mu.Unlock()
@@ -153,7 +146,6 @@ func (m *SecretManager) refreshLoop() {
 		m.mu.RUnlock()
 
 		if next.IsZero() {
-			fmt.Println("[SecretManager] No expiry time known. Auto-refresh paused until error or manual refresh.")
 			select {
 			case <-m.stopChan:
 				return
@@ -174,7 +166,6 @@ func (m *SecretManager) refreshLoop() {
 			timer.Stop()
 
 			if err != nil {
-				fmt.Printf("[SecretManager] Refresh failed: %v. Retrying in 30s...\n", err)
 				// Retry in 30s on failure?
 				m.mu.Lock()
 				m.nextRefresh = time.Now().Add(30 * time.Second)
@@ -183,7 +174,6 @@ func (m *SecretManager) refreshLoop() {
 				m.mu.Lock()
 				m.nextRefresh = newNext
 				m.mu.Unlock()
-				fmt.Printf("[SecretManager] Secret refreshed. Next refresh at: %v\n", newNext)
 			}
 
 		case <-m.stopChan:
@@ -200,7 +190,6 @@ func (m *SecretManager) fetchToken() (string, error) {
 	if err != nil {
 		// First attempt failed, time should now be synced from Date header
 		// Retry once with corrected time
-		fmt.Printf("[SecretManager] First fetchToken attempt failed: %v. Retrying with synced time...\n", err)
 		token, err = m.doFetchToken()
 		if err != nil {
 			return "", fmt.Errorf("fetchToken retry failed: %w", err)
@@ -211,7 +200,6 @@ func (m *SecretManager) fetchToken() (string, error) {
 
 // doFetchToken performs the actual token fetch request
 func (m *SecretManager) doFetchToken() (string, error) {
-	fmt.Println("[SecretManager] Generating Ed25519 keypair for token...")
 	// Generate Ed25519 keypair
 	publicKey, privateKey, err := GenerateEd25519Keypair()
 	if err != nil {
@@ -249,7 +237,6 @@ func (m *SecretManager) doFetchToken() (string, error) {
 		return "", fmt.Errorf("failed to sign payload: %w", err)
 	}
 
-	fmt.Printf("[SecretManager] Fetching token from %s\n", url)
 	// Create HTTP request
 	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -286,7 +273,6 @@ func (m *SecretManager) doFetchToken() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("[SecretManager] Token response status: %d, body: %s\n", resp.StatusCode, string(respBody))
 
 	var result struct {
 		Token      string `json:"token"`
@@ -315,7 +301,6 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 	if err != nil {
 		// First attempt failed, time should now be synced from Date header
 		// Retry once with corrected time
-		fmt.Printf("[SecretManager] First fetchSecret attempt failed: %v. Retrying with synced time...\n", err)
 		secret, expireAt, err = m.doFetchSecret()
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("fetchSecret retry failed: %w", err)
@@ -326,7 +311,6 @@ func (m *SecretManager) fetchSecret() (string, time.Time, error) {
 
 // doFetchSecret performs the actual secret fetch request
 func (m *SecretManager) doFetchSecret() (string, time.Time, error) {
-	fmt.Println("[SecretManager] Fetching secret...")
 	m.mu.RLock()
 	token := m.currentToken
 	m.mu.RUnlock()
@@ -372,7 +356,6 @@ func (m *SecretManager) doFetchSecret() (string, time.Time, error) {
 		return "", time.Time{}, fmt.Errorf("failed to sign payload: %w", err)
 	}
 
-	fmt.Printf("[SecretManager] Fetching secret from %s\n", url)
 	// Create HTTP request
 	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -410,7 +393,6 @@ func (m *SecretManager) doFetchSecret() (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	fmt.Printf("[SecretManager] Secret response status: %d, body: %s\n", resp.StatusCode, string(respBody))
 
 	var result SecretResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
@@ -428,7 +410,6 @@ func (m *SecretManager) doFetchSecret() (string, time.Time, error) {
 			expireAtTime = t
 		} else {
 			// Try without Z or with different precision if needed, but RFC3339 is standard
-			fmt.Printf("[SecretManager] Failed to parse expire_at: %v. Using expires_in_seconds.\n", err)
 		}
 	}
 
@@ -439,8 +420,6 @@ func (m *SecretManager) doFetchSecret() (string, time.Time, error) {
 
 	return result.Plaintext, expireAtTime, nil
 }
-
-
 
 // DeviceInfo holds device information for signature generation
 type DeviceInfo struct {
