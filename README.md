@@ -149,3 +149,9 @@ go test -v ./pkg/network/sign_util_test.go ./pkg/network/sign_util.go
 
 
 version: 1.0.1
+
+
+
+Release note:
+
+2026-02-04: Fix signatura order for different channels

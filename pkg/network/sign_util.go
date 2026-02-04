@@ -67,18 +67,19 @@ type SignConfig struct {
 }
 
 func getPayloadOrder(channel string) []string {
-	switch channel {
-	case "FX_iOS_2512", "JC_AP_iOS_2512":
+	upperChannel := strings.ToUpper(channel)
+	switch {
+	case strings.Contains(upperChannel, "IOS"):
 		return []string{"method", "path", "timestamp", "nonce", "body", "platform", "operationId", "deviceId", "channel", "packageName", "version", "brand", "buildNumber"}
-	case "FX_APK_2512", "JC_GP_APK_2512":
+	case strings.Contains(upperChannel, "APK"):
 		return []string{"path", "method", "body", "nonce", "timestamp", "platform", "deviceId", "operationId", "channel", "packageName", "version", "buildNumber", "brand"}
-	case "FX_PC_2512", "JC_PC_2512":
+	case strings.Contains(upperChannel, "PC"):
 		return []string{"method", "body", "path", "timestamp", "nonce", "platform", "operationId", "channel", "deviceId", "packageName", "version", "brand", "buildNumber"}
-	case "FX_MAC_2512", "JC_MAC_2512":
+	case strings.Contains(upperChannel, "MAC"):
 		return []string{"path", "method", "timestamp", "body", "nonce", "platform", "operationId", "deviceId", "packageName", "channel", "version", "buildNumber", "brand"}
-	case "FX_WEB_2512", "JC_WEB_2512":
+	case strings.Contains(upperChannel, "WEB"):
 		return []string{"method", "path", "nonce", "timestamp", "body", "platform", "operationId", "deviceId", "channel", "version", "packageName", "brand", "buildNumber"}
-	case "FX_H5_2512", "JC_H5_2512":
+	case strings.Contains(upperChannel, "H5"):
 		return []string{"body", "method", "path", "timestamp", "nonce", "platform", "operationId", "deviceId", "channel", "packageName", "brand", "version", "buildNumber"}
 	default:
 		return []string{"method", "path", "body", "timestamp", "nonce", "platform", "operationId", "deviceId", "channel", "packageName", "version", "brand", "buildNumber"}
